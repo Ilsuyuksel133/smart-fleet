@@ -17,3 +17,11 @@ class SensorLog(Base):
     temperature = Column(Float)
     status = Column(String)
     timestamp = Column(DateTime, default=func.now())
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vehicle_id = Column(Integer)
+    reason = Column(String)
+    timestamp = Column(DateTime, default=func.now())
