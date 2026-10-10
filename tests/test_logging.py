@@ -1,7 +1,7 @@
 import json
 import logging
 
-from logging_config import JsonFormatter
+from logging_config import JsonFormatter, setup_logging
 
 
 def formatted(record):
@@ -47,3 +47,11 @@ def test_alert_log_is_warning_with_alert_fields(client, caplog, vehicle_id):
     assert entry["vehicle_id"] == vehicle_id
     assert entry["alert_type"] == "high_temperature"
     assert entry["temperature"] == 95
+
+
+def test_uvicorn_access_log_is_disabled():
+    # Our middleware logs every request once; uvicorn's access log would duplicate it
+    setup_logging()
+    access_logger = logging.getLogger("uvicorn.access")
+    assert access_logger.handlers == []
+    assert access_logger.propagate is False

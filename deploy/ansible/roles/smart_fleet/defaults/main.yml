@@ -14,6 +14,9 @@ smart_fleet_repo_root: "{{ playbook_dir }}/../.."
 smart_fleet_alert_temp_threshold: 80
 smart_fleet_log_level: INFO
 
+# LLM backend of the incident agent: "ollama" or "fake"
+smart_fleet_llm_provider: ollama
+
 # Docker daemon address (Linux default; may differ on Docker Desktop)
 smart_fleet_docker_host: unix:///var/run/docker.sock
 

@@ -32,6 +32,7 @@ jobs:
           cache-dependency-path: |
             requirements-dev.txt
             api/requirements.txt
+            agent/requirements.txt
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
@@ -42,7 +43,7 @@ jobs:
           ruff format --check .
 
       - name: Test
-        run: pytest --cov=api --cov-report=xml --cov-report=term
+        run: pytest --cov=api --cov=agent --cov-report=xml --cov-report=term
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
@@ -58,7 +59,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [api, dashboard, simulator]
+        service: [api, dashboard, simulator, agent]
     env:
       # Push images to GHCR only on pushes to main; pull requests only build
       PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -96,6 +97,9 @@ jobs:
   smoke-test:
     needs: docker-build
     runs-on: ubuntu-latest
+    env:
+      # No model on the CI runner: the agent uses scripted responses
+      LLM_PROVIDER: fake
     steps:
       - uses: actions/checkout@v7
 
@@ -148,7 +152,7 @@ jobs:
       - name: Build images for this commit
         working-directory: .
         run: |
-          for service in api dashboard simulator; do
+          for service in api dashboard simulator agent; do
             docker build -t "ghcr.io/ilsuyuksel133/smart-fleet-${service}:ci" -f "${service}/Dockerfile" .
           done
 

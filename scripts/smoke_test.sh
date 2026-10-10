@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # End-to-end test of the running stack: health -> vehicle -> data -> alert -> metrics -> log (Loki)
-# Usage: scripts/smoke_test.sh [API_URL] [LOKI_URL]
-#   defaults: http://localhost:8000 and http://localhost:3100
+# Usage: scripts/smoke_test.sh [API_URL] [LOKI_URL] [AGENT_URL]
+#   defaults: http://localhost:8000, http://localhost:3100, http://localhost:8100
 set -euo pipefail
 
 API_URL="${1:-${API_URL:-http://localhost:8000}}"
 LOKI_URL="${2:-${LOKI_URL:-http://localhost:3100}}"
+AGENT_URL="${3:-${AGENT_URL:-http://localhost:8100}}"
 RETRIES="${RETRIES:-30}"
 LOKI_RETRIES="${LOKI_RETRIES:-45}"
 
@@ -67,6 +68,17 @@ for i in $(seq 1 "$LOKI_RETRIES"); do
   fi
   [ "$i" -eq "$LOKI_RETRIES" ] && fail "Alert log not found in Loki after $LOKI_RETRIES attempts"
   log "Waiting for alert log in Loki... ($i/$LOKI_RETRIES)"
+  sleep 2
+done
+
+# 7) Is the incident agent up?
+for i in $(seq 1 "$RETRIES"); do
+  if curl -fsS "$AGENT_URL/health" > /dev/null 2>&1; then
+    log "Agent health check OK"
+    break
+  fi
+  [ "$i" -eq "$RETRIES" ] && fail "Agent did not become healthy after $RETRIES attempts"
+  log "Waiting for agent... ($i/$RETRIES)"
   sleep 2
 done
 
