@@ -8,6 +8,7 @@
 .git
 .github
 tests
-docs
+docs/*
+!docs/RUNBOOK.md
 .pytest_cache
 .ruff_cache

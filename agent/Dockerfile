@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # The code is a package ("agent"), so it is copied into /app/agent
 COPY agent/ ./agent/
+# The runbook is read by the get_runbook tool (read-only, baked into the image)
+COPY docs/RUNBOOK.md ./docs/RUNBOOK.md
 
 RUN useradd --create-home app
 USER app

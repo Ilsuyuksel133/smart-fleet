@@ -82,7 +82,7 @@ Look at the trend in Grafana: a steady climb points to a real problem, sudden ju
 
 **Symptom**
 - Alert `HighAlertRate` firing: more than 0.5 fleet alerts per second over 5 minutes.
-- "Alert rate by type" panel is high; API logs are full of `WARNING Alert:` lines.
+- "Alert rate by type" panel is high; the API logs many `"message": "alert created"` lines at level `warning`.
 
 **Possible causes**
 - Many vehicles in trouble at the same time (fleet-wide incident).
@@ -92,7 +92,7 @@ Look at the trend in Grafana: a steady climb points to a real problem, sudden ju
 
 **Checks**
 ```bash
-docker compose logs --tail 50 api | grep WARNING          # which vehicles / types?
+docker compose logs --tail 50 api | grep "alert created"  # which vehicles / types?
 curl -s http://localhost:8000/metrics | grep fleet_alerts_total
 docker compose exec api printenv ALERT_TEMP_THRESHOLD
 ```
