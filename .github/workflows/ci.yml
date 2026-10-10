@@ -115,3 +115,64 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose down -v
+
+  ansible-deploy-test:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    env:
+      ANSIBLE_NOCOLOR: "1"
+    defaults:
+      run:
+        working-directory: deploy/ansible
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: deploy/ansible/requirements.txt
+
+      - name: Install Ansible
+        run: pip install -r requirements.txt
+
+      - name: Lint playbook
+        run: ansible-lint
+
+      - name: Generate a throwaway Grafana password
+        run: |
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          echo "GRAFANA_PASSWORD=$password" >> "$GITHUB_ENV"
+
+      - name: Build images for this commit
+        working-directory: .
+        run: |
+          for service in api dashboard simulator; do
+            docker build -t "ghcr.io/ilsuyuksel133/smart-fleet-${service}:ci" -f "${service}/Dockerfile" .
+          done
+
+      - name: Run playbook (first run)
+        run: >-
+          ansible-playbook -i inventory.ci.ini site.yml
+          -e "smart_fleet_grafana_admin_password=$GRAFANA_PASSWORD"
+
+      - name: Run smoke test
+        working-directory: .
+        run: ./scripts/smoke_test.sh http://localhost:8000
+
+      - name: Run playbook again and check idempotency (changed=0)
+        run: |
+          ansible-playbook -i inventory.ci.ini site.yml \
+            -e "smart_fleet_grafana_admin_password=$GRAFANA_PASSWORD" | tee second-run.log
+          grep -qE "localhost +: ok=[0-9]+ +changed=0 +unreachable=0 +failed=0" second-run.log
+
+      - name: Show logs on failure
+        if: failure()
+        working-directory: /tmp
+        run: docker compose -p smart-fleet logs
+
+      - name: Tear down
+        if: always()
+        working-directory: /tmp
+        run: docker compose -p smart-fleet down -v

@@ -19,3 +19,4 @@ data/
 # Local notes
 DEVOPS_PLAN.md
 DEVOPS_PLAN_2.md
+deploy/ansible/inventory.ini
