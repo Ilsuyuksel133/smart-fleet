@@ -3,7 +3,7 @@
 Operational guide for the alerts defined in `monitoring/prometheus/alert_rules.yml` and common issues.
 All commands are run from the repository root.
 
-Useful links: API docs http://localhost:8000/docs · Prometheus alerts http://localhost:9090/alerts · Grafana http://localhost:3000
+Useful links: API docs http://localhost:8000/docs · Prometheus alerts http://localhost:9090/alerts · Grafana http://localhost:3000 · Logs: Grafana → Explore → Loki
 
 ---
 
@@ -25,6 +25,16 @@ docker compose logs --tail 100 api         # startup errors, tracebacks
 curl -i http://localhost:8000/health       # 200 {"status":"ok","db":"ok"} expected
 ```
 Prometheus → Status → Targets: is `fleet-api` UP, and what is the "Last error"?
+
+**Logs to check (Grafana → Explore → Loki)**
+```logql
+# Last lines of the API before it went down (startup errors, tracebacks)
+{service="api"} | json | level=~"error|critical"
+{service="api"}
+# Health check failures logged by the API
+{service="api"} |= "Health check"
+```
+If Loki itself shows nothing for the API, fall back to `docker compose logs api`.
 
 **Fix**
 - Container stopped: `docker compose up -d api`
@@ -53,6 +63,14 @@ curl -s http://localhost:8000/metrics | grep fleet_vehicle_temperature_celsius
 ```
 Look at the trend in Grafana: a steady climb points to a real problem, sudden jumps to a sensor issue.
 
+**Logs to check**
+```logql
+# Alert history of the vehicle (replace 3 with the vehicle_id from the alert)
+{service="api"} | json | message="alert created" | vehicle_id="3"
+# Readings the simulator sent for it
+{service="simulator"} | json | message="reading sent" | vehicle_id="3"
+```
+
 **Fix**
 - Real vehicle: notify the vehicle operator / maintenance team, take the vehicle out of service if necessary.
 - Faulty sensor: mark the vehicle for sensor maintenance.
@@ -79,6 +97,13 @@ curl -s http://localhost:8000/metrics | grep fleet_alerts_total
 docker compose exec api printenv ALERT_TEMP_THRESHOLD
 ```
 In Grafana, check whether one alert type or one vehicle dominates.
+
+**Logs to check**
+```logql
+# Alerts per type and per vehicle over the last 5 minutes
+sum by (alert_type) (count_over_time({service="api"} | json | message="alert created" [5m]))
+sum by (vehicle_id) (count_over_time({service="api"} | json | message="alert created" [5m]))
+```
 
 **Fix**
 - One vehicle dominates: handle it like *VehicleOverheating* / a faulty sensor.
@@ -112,6 +137,38 @@ In Prometheus (http://localhost:9090) run `up` and `fleet_sensor_readings_total`
 - Simulator stopped: `docker compose up -d simulator`.
 - Provisioning errors: fix the files under `monitoring/grafana/`, then `docker compose restart grafana`.
 - Time range: select "Last 15 minutes" and refresh.
+
+---
+
+## No logs in Loki
+
+**Symptom**
+- Log panels in Grafana are empty, or a Loki query such as `{service="api"}` returns nothing.
+- The smoke test fails at "Waiting for alert log in Loki".
+
+**Possible causes**
+- The `alloy` or `loki` container is down.
+- Alloy cannot read the Docker socket (missing mount or permission problem).
+- The containers belong to a different Compose project name — Alloy only collects containers labelled `com.docker.compose.project=smart-fleet`.
+- Labels differ from what the query expects (e.g. `service="api"` vs. a different service name).
+- Loki rejects the pushed logs (check Alloy's logs for push errors).
+
+**Checks**
+```bash
+docker compose ps alloy loki
+docker compose logs --tail 50 alloy | grep -iE "error|warn"
+docker compose logs --tail 50 loki | grep -iE "error|warn"
+curl -s http://localhost:3100/ready                                  # "ready" (first ~15 s after start: "Ingester not ready")
+curl -s http://localhost:3100/loki/api/v1/label/service/values       # which services have logs?
+docker inspect smart-fleet-api-1 --format '{{ index .Config.Labels "com.docker.compose.project" }}'
+```
+The Alloy UI at http://localhost:12345 shows every pipeline component and whether it is healthy.
+
+**Fix**
+- Container down: `docker compose up -d loki alloy`
+- Docker socket: make sure `/var/run/docker.sock` is mounted into `alloy` (see `docker-compose.yml`) and exists on the host.
+- Wrong project name: start the stack from the repository's `docker-compose.yml` (it sets `name: smart-fleet`).
+- After changing `monitoring/alloy/config.alloy` or `monitoring/loki/loki-config.yml`: `docker compose restart alloy loki`.
 
 ---
 

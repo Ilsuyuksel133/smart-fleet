@@ -1,5 +1,15 @@
+name: smart-fleet
+
+# Tüm container'lar için log rotation: dosya başına 10 MB, en fazla 3 dosya (disk dolmasın)
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   api:
+    logging: *default-logging
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -19,6 +29,7 @@ services:
     restart: unless-stopped
 
   dashboard:
+    logging: *default-logging
     build:
       context: .
       dockerfile: dashboard/Dockerfile
@@ -32,6 +43,7 @@ services:
     restart: unless-stopped
 
   simulator:
+    logging: *default-logging
     build:
       context: .
       dockerfile: simulator/Dockerfile
@@ -44,6 +56,7 @@ services:
     restart: unless-stopped
 
   prometheus:
+    logging: *default-logging
     image: prom/prometheus:v3.15.0
     ports:
       - "9090:9090"
@@ -58,6 +71,7 @@ services:
     restart: unless-stopped
 
   grafana:
+    logging: *default-logging
     image: grafana/grafana:13.2.3
     ports:
       - "3000:3000"
@@ -72,9 +86,41 @@ services:
       - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
+      - loki
+    restart: unless-stopped
+
+  loki:
+    logging: *default-logging
+    image: grafana/loki:3.7.8
+    ports:
+      - "3100:3100"
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    restart: unless-stopped
+
+  alloy:
+    logging: *default-logging
+    image: grafana/alloy:v1.20.1
+    ports:
+      - "12345:12345" # Alloy arayüzü (pipeline'ı görmek için)
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # Container loglarını okumak için Docker socket (read-only mount)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
     restart: unless-stopped
 
 volumes:
   fleet-data:
   prometheus-data:
   grafana-data:
+  loki-data:

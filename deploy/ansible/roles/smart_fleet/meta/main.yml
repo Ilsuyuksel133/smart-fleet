@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: İlsu Yüksel
+  description: Installs Docker and deploys the smart-fleet Docker Compose stack
+  license: MIT
+  min_ansible_version: "2.19"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+dependencies: []

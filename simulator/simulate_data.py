@@ -5,10 +5,12 @@ import time
 
 import requests
 
+from logging_config import setup_logging
+
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 INTERVAL_SECONDS = float(os.getenv("INTERVAL_SECONDS", "3"))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+setup_logging()
 log = logging.getLogger("simulator")
 
 
@@ -17,11 +19,11 @@ def wait_for_api(retries=30, delay=2):
     for attempt in range(1, retries + 1):
         try:
             if requests.get(f"{API_URL}/health", timeout=3).ok:
-                log.info("API hazır: %s", API_URL)
+                log.info("api ready", extra={"api_url": API_URL})
                 return
         except requests.RequestException:
             pass
-        log.info("API bekleniyor... (%d/%d)", attempt, retries)
+        log.info("waiting for api", extra={"attempt": attempt, "retries": retries})
         time.sleep(delay)
     raise SystemExit(f"API'ye ulaşılamadı: {API_URL}")
 
@@ -32,7 +34,7 @@ def get_vehicle_ids():
     if not vehicles:
         for name in ["Truck-1", "Truck-2", "Van-1"]:
             requests.post(f"{API_URL}/vehicles", json={"name": name}, timeout=5).raise_for_status()
-            log.info("Araç oluşturuldu: %s", name)
+            log.info("vehicle created", extra={"vehicle_name": name})
         vehicles = requests.get(f"{API_URL}/vehicles", timeout=5).json()
     return [v["id"] for v in vehicles]
 
@@ -40,7 +42,7 @@ def get_vehicle_ids():
 def main():
     wait_for_api()
     vehicle_ids = get_vehicle_ids()
-    log.info("Simülasyon başladı, araçlar: %s", vehicle_ids)
+    log.info("simulation started", extra={"vehicle_ids": vehicle_ids})
 
     while True:
         for vid in vehicle_ids:
@@ -52,9 +54,12 @@ def main():
                     json={"temperature": temp, "status": status},
                     timeout=5,
                 ).raise_for_status()
-                log.info("Araç %s → sıcaklık: %.1f°C, durum: %s", vid, temp, status)
+                log.info(
+                    "reading sent",
+                    extra={"vehicle_id": vid, "temperature": temp, "vehicle_status": status},
+                )
             except requests.RequestException as e:
-                log.error("Araç %s için veri gönderilemedi: %s", vid, e)
+                log.error("reading failed", extra={"vehicle_id": vid, "error": str(e)})
         time.sleep(INTERVAL_SECONDS)
 
 

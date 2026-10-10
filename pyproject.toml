@@ -11,4 +11,4 @@ extend-exclude = ["venv"]
 select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["database", "main", "metrics", "models"]
+known-first-party = ["database", "logging_config", "main", "metrics", "models"]

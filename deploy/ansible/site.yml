@@ -1,0 +1,8 @@
+---
+# Boş bir Ubuntu sunucusunu hazırlar ve smart-fleet'i GHCR imajlarıyla çalıştırır.
+#   ansible-playbook -i inventory.ini site.yml -e smart_fleet_grafana_admin_password=...
+- name: Deploy smart-fleet
+  hosts: fleet
+  become: true
+  roles:
+    - smart_fleet

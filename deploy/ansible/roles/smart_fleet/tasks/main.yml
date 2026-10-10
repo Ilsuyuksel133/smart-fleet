@@ -1,0 +1,77 @@
+---
+- name: Check required variables
+  ansible.builtin.assert:
+    that:
+      - smart_fleet_image_tag is defined
+      - smart_fleet_image_tag | length > 0
+      - smart_fleet_image_tag != "latest"
+      - smart_fleet_grafana_admin_password is defined
+      - smart_fleet_grafana_admin_password | length > 0
+    fail_msg: >-
+      smart_fleet_image_tag (immutable tag, not "latest") and
+      smart_fleet_grafana_admin_password must be set.
+    quiet: true
+
+# 1) Docker Engine + Compose plugin: kuruluysa dokunma
+- name: Check whether Docker Compose is installed
+  ansible.builtin.command: docker compose version
+  register: smart_fleet_compose_check
+  changed_when: false
+  failed_when: false
+
+- name: Install Docker Engine and Compose plugin
+  ansible.builtin.include_tasks: docker.yml
+  when: smart_fleet_compose_check.rc != 0
+
+# 2) Uygulama klasörü
+- name: Create application directory
+  ansible.builtin.file:
+    path: "{{ smart_fleet_app_dir }}"
+    state: directory
+    mode: "0755"
+
+# 3) Compose dosyaları, monitoring ayarları ve .env
+- name: Copy Docker Compose files
+  ansible.builtin.copy:
+    src: "{{ smart_fleet_repo_root }}/{{ item }}"
+    dest: "{{ smart_fleet_app_dir }}/{{ item }}"
+    mode: "0644"
+  loop:
+    - docker-compose.yml
+    - docker-compose.prod.yml
+
+- name: Copy monitoring configuration
+  ansible.builtin.copy:
+    src: "{{ smart_fleet_repo_root }}/monitoring/"
+    dest: "{{ smart_fleet_app_dir }}/monitoring/"
+    mode: "0644"
+    directory_mode: "0755"
+
+- name: Render .env from template
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ smart_fleet_app_dir }}/.env"
+    mode: "0600" # şifre içeriyor, sadece root okuyabilir
+
+# 4) Stack'i GHCR imajlarıyla başlat
+- name: Start the stack with Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ smart_fleet_app_dir }}"
+    docker_host: "{{ smart_fleet_docker_host }}"
+    files:
+      - docker-compose.yml
+      - docker-compose.prod.yml
+    pull: "{{ smart_fleet_pull_policy }}"
+    build: never
+    state: present
+    wait: false
+
+# 5) API sağlıklı olana kadar bekle
+- name: Wait for the API health check
+  ansible.builtin.uri:
+    url: http://localhost:8000/health
+    status_code: 200
+  register: smart_fleet_health
+  until: smart_fleet_health.status == 200
+  retries: "{{ smart_fleet_health_retries }}"
+  delay: "{{ smart_fleet_health_delay }}"

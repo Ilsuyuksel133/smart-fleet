@@ -1,0 +1,25 @@
+---
+# Sunucuda uygulamanın kurulacağı klasör
+smart_fleet_app_dir: /opt/smart-fleet
+
+# Dosyaların kopyalanacağı repo kökü (site.yml'e göre iki üst klasör)
+smart_fleet_repo_root: "{{ playbook_dir }}/../.."
+
+# Deploy edilecek imaj tag'i — zorunlu, değişmez bir tag olmalı (ör. sha-1a2b3c4)
+# smart_fleet_image_tag:
+
+# Grafana admin şifresi — zorunlu, komut satırından veya Ansible Vault'tan gelmeli
+# smart_fleet_grafana_admin_password:
+
+smart_fleet_alert_temp_threshold: 80
+smart_fleet_log_level: INFO
+
+# Docker daemon adresi (Linux varsayılanı; Docker Desktop'ta farklı olabilir)
+smart_fleet_docker_host: unix:///var/run/docker.sock
+
+# İmaj sunucuda yoksa çek. Tag'ler değişmez olduğu için "missing" yeterli ve idempotent.
+smart_fleet_pull_policy: missing
+
+# /health için bekleme: 30 deneme x 2 sn
+smart_fleet_health_retries: 30
+smart_fleet_health_delay: 2

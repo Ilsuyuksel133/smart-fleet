@@ -1,0 +1,15 @@
+# Production override: kaynak koddan build etmek yerine GHCR'daki hazır imajları kullan.
+# Kullanım: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# IMAGE_TAG değişmez bir tag olmalı (ör. sha-1a2b3c4), "latest" değil.
+services:
+  api:
+    build: !reset null
+    image: ghcr.io/ilsuyuksel133/smart-fleet-api:${IMAGE_TAG:?set IMAGE_TAG in .env}
+
+  dashboard:
+    build: !reset null
+    image: ghcr.io/ilsuyuksel133/smart-fleet-dashboard:${IMAGE_TAG:?set IMAGE_TAG in .env}
+
+  simulator:
+    build: !reset null
+    image: ghcr.io/ilsuyuksel133/smart-fleet-simulator:${IMAGE_TAG:?set IMAGE_TAG in .env}
