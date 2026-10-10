@@ -228,9 +228,17 @@ def build_tools(settings: Settings) -> dict[str, Tool]:
             name="query_prometheus",
             description=(
                 "Run a PromQL query over the last N minutes and get min/max/last values per "
-                "series. Useful metrics: up, fleet_vehicle_temperature_celsius, "
-                "fleet_alerts_total, fleet_sensor_readings_total, http_requests_total, "
-                "http_request_duration_seconds_bucket."
+                "series. Available metrics (and their only labels): "
+                "up (labels: job, instance), "
+                "fleet_vehicle_temperature_celsius (gauge: the current temperature, query it "
+                "directly without rate; labels: vehicle_id), "
+                "fleet_sensor_readings_total (labels: vehicle_id), "
+                "fleet_alerts_total (labels: type = high_temperature or abnormal_status), "
+                "http_requests_total (labels: method, path, status), "
+                "http_request_duration_seconds_bucket (labels: method, path, le). "
+                "Examples: fleet_vehicle_temperature_celsius, "
+                "sum by (type) (rate(fleet_alerts_total[5m])). "
+                "The *_total metrics are counters: they only grow, so use rate(...[5m])."
             ),
             parameters={
                 "type": "object",

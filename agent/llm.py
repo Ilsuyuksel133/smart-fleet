@@ -25,6 +25,7 @@ class ToolCall:
 
     name: str
     arguments: dict[str, Any]
+    id: str | None = None  # set by Ollama; echoed back with the tool result
 
 
 @dataclass
@@ -39,7 +40,9 @@ class LLMResponse:
         message: Message = {"role": "assistant", "content": self.content}
         if self.tool_calls:
             message["tool_calls"] = [
-                {"function": {"name": call.name, "arguments": call.arguments}}
+                {"id": call.id, "function": {"name": call.name, "arguments": call.arguments}}
+                if call.id
+                else {"function": {"name": call.name, "arguments": call.arguments}}
                 for call in self.tool_calls
             ]
         return message
@@ -59,10 +62,11 @@ class OllamaProvider(LLMProvider):
 
     name = "ollama"
 
-    def __init__(self, base_url: str, model: str, timeout: float):
+    def __init__(self, base_url: str, model: str, timeout: float, think: bool = False):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.think = think
 
     def chat(self, messages: list[Message], tools: list[ToolDefinition]) -> LLMResponse:
         payload = {
@@ -71,6 +75,9 @@ class OllamaProvider(LLMProvider):
             "tools": tools,
             # One complete answer instead of a token stream: simpler to handle
             "stream": False,
+            # "Thinking" models (e.g. qwen3) can reason before answering;
+            # slower but sometimes more accurate. Configurable via OLLAMA_THINK.
+            "think": self.think,
         }
         response = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout)
         response.raise_for_status()
@@ -80,6 +87,7 @@ class OllamaProvider(LLMProvider):
             ToolCall(
                 name=call["function"]["name"],
                 arguments=call["function"].get("arguments") or {},
+                id=call.get("id"),
             )
             for call in message.get("tool_calls") or []
         ]
@@ -113,5 +121,6 @@ def get_provider(settings: Settings) -> LLMProvider:
             base_url=settings.ollama_url,
             model=settings.ollama_model,
             timeout=settings.ollama_timeout_seconds,
+            think=settings.ollama_think,
         )
     return FakeProvider()
