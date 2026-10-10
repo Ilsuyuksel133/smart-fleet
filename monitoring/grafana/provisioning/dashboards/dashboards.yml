@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: smart-fleet
+    folder: Smart Fleet
+    type: file
+    disableDeletion: true
+    options:
+      path: /var/lib/grafana/dashboards
