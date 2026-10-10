@@ -11,21 +11,21 @@ try:
     vehicles = requests.get(f"{API_URL}/vehicles", timeout=5).json()
     alerts = requests.get(f"{API_URL}/alerts", timeout=5).json()
 except requests.RequestException as e:
-    st.error(f"API'ye ulaşılamıyor ({API_URL}): {e}")
+    st.error(f"Cannot reach the API ({API_URL}): {e}")
     st.stop()
 
 # Vehicle list
-st.header("Araçlar")
+st.header("Vehicles")
 if vehicles:
     for v in vehicles:
         st.metric(label=v["name"], value=v["status"])
 else:
-    st.info("Henüz araç yok.")
+    st.info("No vehicles yet.")
 
 # Alerts
-st.header("Alertler")
+st.header("Alerts")
 if alerts:
     for a in alerts:
-        st.error(f"Araç {a['vehicle_id']} — {a['reason']} ({a['timestamp']})")
+        st.error(f"Vehicle {a['vehicle_id']} — {a['reason']} ({a['timestamp']})")
 else:
-    st.success("Aktif alert yok.")
+    st.success("No active alerts.")

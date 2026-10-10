@@ -86,7 +86,7 @@ def send_data(vehicle_id: int, data: SensorData, db: Session = Depends(get_db)):
 
     # Alert logic
     if data.temperature > ALERT_TEMP_THRESHOLD:
-        alert = Alert(vehicle_id=vehicle_id, reason=f"Yüksek sıcaklık: {data.temperature}°C")
+        alert = Alert(vehicle_id=vehicle_id, reason=f"High temperature: {data.temperature}°C")
         db.add(alert)
         metrics.ALERTS.labels("high_temperature").inc()
         log.warning(
@@ -99,7 +99,7 @@ def send_data(vehicle_id: int, data: SensorData, db: Session = Depends(get_db)):
         )
 
     if data.status != "OK":
-        alert = Alert(vehicle_id=vehicle_id, reason=f"Anormal durum: {data.status}")
+        alert = Alert(vehicle_id=vehicle_id, reason=f"Abnormal status: {data.status}")
         db.add(alert)
         metrics.ALERTS.labels("abnormal_status").inc()
         log.warning(
@@ -113,7 +113,7 @@ def send_data(vehicle_id: int, data: SensorData, db: Session = Depends(get_db)):
         )
 
     db.commit()
-    return {"message": "Veri kaydedildi", "alerts_checked": True}
+    return {"message": "Data saved", "alerts_checked": True}
 
 
 # --- Endpoint 3: list all vehicles ---
