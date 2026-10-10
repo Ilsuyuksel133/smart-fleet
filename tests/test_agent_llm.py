@@ -102,3 +102,27 @@ def test_ollama_provider_raises_on_http_error():
     respx.post(f"{OLLAMA}/api/chat").mock(return_value=httpx.Response(500))
     with pytest.raises(httpx.HTTPStatusError):
         OllamaProvider(OLLAMA, "m:1b", 5).chat([], tools=[])
+
+
+def test_response_as_message_keeps_tool_call_id():
+    response = LLMResponse(tool_calls=[ToolCall(name="get_runbook", arguments={}, id="call_1")])
+    assert response.as_message()["tool_calls"][0]["id"] == "call_1"
+
+
+@respx.mock
+def test_ollama_provider_passes_think_flag_and_reads_call_id():
+    route = respx.post(f"{OLLAMA}/api/chat").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "message": {
+                    "content": "",
+                    "tool_calls": [{"id": "call_9", "function": {"name": "x", "arguments": {}}}],
+                }
+            },
+        )
+    )
+    response = OllamaProvider(OLLAMA, "m:1b", 5, think=True).chat([], tools=[])
+    assert response.tool_calls[0].id == "call_9"
+    body = httpx.Response(200, content=route.calls.last.request.content).json()
+    assert body["think"] is True

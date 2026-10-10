@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     ollama_url: str = "http://host.docker.internal:11434"
     ollama_model: str = "qwen3:8b"
     ollama_timeout_seconds: float = 120.0
+    ollama_think: bool = False
+
+    # Guard rails of the agent loop
+    agent_max_steps: int = 8
+    agent_max_seconds: float = 300.0
 
     # Read-only data sources the agent's tools will query
     prometheus_url: str = "http://prometheus:9090"
