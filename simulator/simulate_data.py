@@ -7,8 +7,6 @@ import requests
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 INTERVAL_SECONDS = float(os.getenv("INTERVAL_SECONDS", "3"))
-# Adım 3'te /health eklenince bu /health olacak
-READY_PATH = "/vehicles"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("simulator")
@@ -18,7 +16,7 @@ def wait_for_api(retries=30, delay=2):
     """API ayağa kalkana kadar bekle."""
     for attempt in range(1, retries + 1):
         try:
-            if requests.get(f"{API_URL}{READY_PATH}", timeout=3).ok:
+            if requests.get(f"{API_URL}/health", timeout=3).ok:
                 log.info("API hazır: %s", API_URL)
                 return
         except requests.RequestException:
