@@ -1,7 +1,7 @@
 provider "aws" {
   region = var.aws_region
 
-  # Emülatör modunda sahte credential kullan ve gerçek AWS'ye hiç bağlanma
+  # In emulator mode use fake credentials and never contact real AWS
   access_key                  = var.use_local_emulator ? "test" : null
   secret_key                  = var.use_local_emulator ? "test" : null
   skip_credentials_validation = var.use_local_emulator

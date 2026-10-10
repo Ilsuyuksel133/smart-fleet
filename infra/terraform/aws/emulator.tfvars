@@ -1,11 +1,11 @@
-# Moto (lokal AWS emülatörü) ile test için. Gerçek AWS'ye bağlanmaz.
+# For testing against Moto (local AWS emulator). Never connects to real AWS.
 use_local_emulator = true
 emulator_endpoint  = "http://localhost:5000"
 
-# Belgeleme için ayrılmış örnek IP aralığı (RFC 5737), gerçek bir ağ değil
+# IP range reserved for documentation (RFC 5737), not a real network
 allowed_cidrs = ["203.0.113.0/24"]
 
 image_tag = "sha-0000000"
 
-# Moto'nun sağladığı sahte Ubuntu AMI'si (Moto'da Ubuntu 24.04 AMI'si yok)
+# Fake Ubuntu AMI provided by Moto (Moto has no Ubuntu 24.04 AMI)
 ami_id = "ami-785db401"

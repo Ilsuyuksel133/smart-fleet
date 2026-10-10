@@ -1,6 +1,6 @@
 #cloud-config
-# İlk açılışta çalışır: repoyu çeker ve deploy/ansible playbook'unu localhost'a uygular.
-# Grafana şifresi makinede rastgele üretilir; user_data veya Terraform state'e yazılmaz.
+# Runs on first boot: clones the repository and applies the deploy/ansible playbook to localhost.
+# The Grafana password is generated on the machine; it never appears in user_data or the Terraform state.
 package_update: true
 packages:
   - git

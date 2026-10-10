@@ -1,6 +1,6 @@
-// Docker container loglarını toplayıp Loki'ye gönderir.
+// Collects Docker container logs and ships them to Loki.
 
-// 1) Sadece bu compose projesinin container'larını bul
+// 1) Discover only the containers of this Compose project
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
 
@@ -10,7 +10,7 @@ discovery.docker "containers" {
   }
 }
 
-// 2) Label'lar: sadece düşük cardinality'li "service" (compose servis adı)
+// 2) Labels: only the low-cardinality "service" (Compose service name)
 discovery.relabel "containers" {
   targets = []
 
@@ -20,7 +20,7 @@ discovery.relabel "containers" {
   }
 }
 
-// 3) Container loglarını Docker API'sinden oku
+// 3) Read container logs from the Docker API
 loki.source.docker "containers" {
   host          = "unix:///var/run/docker.sock"
   targets       = discovery.docker.containers.targets
@@ -28,10 +28,10 @@ loki.source.docker "containers" {
   forward_to    = [loki.process.levels.receiver]
 }
 
-// 4) Log satırından "level" alanını çıkarıp label yap.
-//    vehicle_id, path gibi alanlar label OLMAZ; sorguda "| json" ile okunur.
+// 4) Extract the "level" field from the log line and turn it into a label.
+//    Fields such as vehicle_id or path are NOT labels; queries parse them with "| json".
 loki.process "levels" {
-  // Bizim servislerimiz JSON log yazıyor
+  // Our own services write JSON logs
   stage.match {
     selector = "{service=~\"api|simulator\"}"
 
@@ -40,7 +40,7 @@ loki.process "levels" {
     }
   }
 
-  // Prometheus, Grafana, Loki ve Alloy logfmt (level=info ...) yazıyor
+  // Prometheus, Grafana, Loki and Alloy write logfmt (level=info ...)
   stage.match {
     selector = "{service!~\"api|simulator\"}"
 
@@ -49,7 +49,7 @@ loki.process "levels" {
     }
   }
 
-  // Seviyeleri tek tipe indir: INFO -> info, warn -> warning
+  // Normalize levels: INFO -> info, warn -> warning
   stage.template {
     source   = "level"
     template = "{{ if eq (ToLower .Value) \"warn\" }}warning{{ else }}{{ ToLower .Value }}{{ end }}"
@@ -62,7 +62,7 @@ loki.process "levels" {
   forward_to = [loki.write.default.receiver]
 }
 
-// 5) Loki'ye gönder
+// 5) Ship to Loki
 loki.write "default" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"

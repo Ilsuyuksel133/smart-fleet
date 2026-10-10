@@ -15,7 +15,7 @@ log = logging.getLogger("simulator")
 
 
 def wait_for_api(retries=30, delay=2):
-    """API ayağa kalkana kadar bekle."""
+    """Wait until the API is up."""
     for attempt in range(1, retries + 1):
         try:
             if requests.get(f"{API_URL}/health", timeout=3).ok:
@@ -25,11 +25,11 @@ def wait_for_api(retries=30, delay=2):
             pass
         log.info("waiting for api", extra={"attempt": attempt, "retries": retries})
         time.sleep(delay)
-    raise SystemExit(f"API'ye ulaşılamadı: {API_URL}")
+    raise SystemExit(f"API not reachable: {API_URL}")
 
 
 def get_vehicle_ids():
-    """Mevcut araçları al, hiç yoksa birkaç tane oluştur."""
+    """Return existing vehicle IDs, creating a few vehicles if there are none."""
     vehicles = requests.get(f"{API_URL}/vehicles", timeout=5).json()
     if not vehicles:
         for name in ["Truck-1", "Truck-2", "Van-1"]:

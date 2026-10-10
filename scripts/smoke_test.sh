@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Çalışan sistemi uçtan uca test eder: health -> araç -> veri -> alert -> metrik -> log (Loki)
-# Kullanım: scripts/smoke_test.sh [API_URL] [LOKI_URL]
-#   varsayılanlar: http://localhost:8000 ve http://localhost:3100
+# End-to-end test of the running stack: health -> vehicle -> data -> alert -> metrics -> log (Loki)
+# Usage: scripts/smoke_test.sh [API_URL] [LOKI_URL]
+#   defaults: http://localhost:8000 and http://localhost:3100
 set -euo pipefail
 
 API_URL="${1:-${API_URL:-http://localhost:8000}}"
@@ -14,7 +14,7 @@ fail() { echo "[smoke] FAIL: $*" >&2; exit 1; }
 
 log "Target: $API_URL"
 
-# 1) API hazır olana kadar bekle
+# 1) Wait until the API is ready
 for i in $(seq 1 "$RETRIES"); do
   if curl -fsS "$API_URL/health" > /dev/null 2>&1; then
     log "Health check OK"
@@ -25,20 +25,20 @@ for i in $(seq 1 "$RETRIES"); do
   sleep 2
 done
 
-# 2) Araç oluştur
+# 2) Create a vehicle
 vehicle=$(curl -fsS -X POST "$API_URL/vehicles" \
   -H "Content-Type: application/json" -d '{"name": "smoke-test"}')
 vehicle_id=$(echo "$vehicle" | grep -oE '"id":[0-9]+' | cut -d: -f2)
 [ -n "$vehicle_id" ] || fail "Could not create vehicle: $vehicle"
 log "Created vehicle id=$vehicle_id"
 
-# 3) Yüksek sıcaklık verisi gönder
+# 3) Send a high-temperature reading
 curl -fsS -X POST "$API_URL/vehicles/$vehicle_id/data" \
   -H "Content-Type: application/json" -d '{"temperature": 95, "status": "OK"}' > /dev/null
 log "Sent 95°C reading"
 
-# 4) Bu araç için alert oluştu mu?
-# Önce değişkene al: "curl | grep -q" pipefail ile SIGPIPE yüzünden yanlış FAIL verebilir
+# 4) Was an alert created for this vehicle?
+# Store the response first: with pipefail, "curl | grep -q" can fail spuriously because of SIGPIPE
 alerts=$(curl -fsS "$API_URL/alerts")
 if grep -qE "\"vehicle_id\":${vehicle_id}[,}]" <<< "$alerts"; then
   log "Alert created for vehicle $vehicle_id"
@@ -46,7 +46,7 @@ else
   fail "No alert found for vehicle $vehicle_id"
 fi
 
-# 5) Metrik sayaçları görünüyor mu?
+# 5) Are the metric counters exposed?
 metrics=$(curl -fsS "$API_URL/metrics")
 grep -q "fleet_sensor_readings_total{vehicle_id=\"${vehicle_id}\"}" <<< "$metrics" \
   || fail "fleet_sensor_readings_total missing for vehicle $vehicle_id"
@@ -54,13 +54,13 @@ grep -q 'fleet_alerts_total{type="high_temperature"}' <<< "$metrics" \
   || fail "fleet_alerts_total missing"
 log "Metrics OK"
 
-# 6) Alert logu Alloy üzerinden Loki'ye ulaştı mı? (toplama birkaç saniye sürebilir)
+# 6) Did the alert log reach Loki through Alloy? (collection can take a few seconds)
 query="{service=\"api\"} | json | message=\"alert created\" | vehicle_id=\"${vehicle_id}\""
 for i in $(seq 1 "$LOKI_RETRIES"); do
-  # Önce değişkene al: "curl | grep -q" pipefail ile SIGPIPE yüzünden yanlış FAIL verebilir
+  # Store the response first: with pipefail, "curl | grep -q" can fail spuriously because of SIGPIPE
   loki_response=$(curl -fsS -G "$LOKI_URL/loki/api/v1/query_range" \
     --data-urlencode "query=$query" --data-urlencode "since=10m" 2>/dev/null || true)
-  # Sonuç boşsa yanıtta "result":[] olur; doluysa log satırı bulunmuştur
+  # An empty result looks like "result":[]; anything else means the log line was found
   if grep -q '"result":\[{' <<< "$loki_response"; then
     log "Alert log found in Loki for vehicle $vehicle_id"
     break

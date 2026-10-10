@@ -1,2 +1,2 @@
-# Grafana alerting kullanılmıyor (alarmlar Prometheus kurallarında); klasör, açılış hatası olmasın diye var
+# Grafana alerting is not used (alerts live in Prometheus rules); this file only prevents a startup error
 apiVersion: 1

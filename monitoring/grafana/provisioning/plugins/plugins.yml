@@ -1,2 +1,2 @@
-# Ek plugin yok; klasör, açılış hatası olmasın diye var
+# No extra plugins; this file only prevents a startup error
 apiVersion: 1

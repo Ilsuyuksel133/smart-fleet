@@ -1,5 +1,5 @@
 ---
-# CI'da bu commit'in kodundan build edilen ":ci" imajları kullanılır.
-# Pull policy varsayılan "missing" kalır: ":ci" imajları runner'da zaten var, çekilmez;
-# Loki, Grafana gibi üçüncü parti imajlar ise runner'da olmadığı için indirilir.
+# CI uses the ":ci" images built from this commit's code.
+# The pull policy stays at the default "missing": the ":ci" images already exist on
+# the runner and are not pulled, while third-party images such as Loki or Grafana are.
 smart_fleet_image_tag: ci

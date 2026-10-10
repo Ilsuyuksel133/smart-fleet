@@ -14,7 +14,7 @@ except requests.RequestException as e:
     st.error(f"API'ye ulaşılamıyor ({API_URL}): {e}")
     st.stop()
 
-# Araç listesi
+# Vehicle list
 st.header("Araçlar")
 if vehicles:
     for v in vehicles:
@@ -22,7 +22,7 @@ if vehicles:
 else:
     st.info("Henüz araç yok.")
 
-# Alertler
+# Alerts
 st.header("Alertler")
 if alerts:
     for a in alerts:

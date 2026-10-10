@@ -1,4 +1,4 @@
-# Build context: repo kökü -> docker build -f dashboard/Dockerfile .
+# Build context: repository root -> docker build -f dashboard/Dockerfile .
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

@@ -1,4 +1,4 @@
-# --- Ağ: VPC, public subnet, internet gateway, route table ---
+# --- Network: VPC, public subnet, internet gateway, route table ---
 
 data "aws_availability_zones" "available" {
   state = "available"
@@ -31,7 +31,7 @@ resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
   route {
-    cidr_block = "0.0.0.0/0" # internete çıkış (giriş değil)
+    cidr_block = "0.0.0.0/0" # outbound route to the internet (not inbound access)
     gateway_id = aws_internet_gateway.main.id
   }
 
@@ -43,7 +43,7 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# --- Güvenlik: sadece izin verilen IP aralıklarından 22 / 8000 / 3000 ---
+# --- Security: 22 / 8000 / 3000 from the allowed CIDR ranges only ---
 
 locals {
   ingress_ports = {
@@ -105,7 +105,7 @@ resource "aws_instance" "app" {
   vpc_security_group_ids = [aws_security_group.app.id]
   key_name               = var.key_name
 
-  # İlk açılışta: repoyu çek ve Ansible playbook'unu bu makinenin kendisine uygula
+  # On first boot: clone the repository and apply the Ansible playbook to this machine
   user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
     repo_url  = var.repo_url
     repo_ref  = var.repo_ref

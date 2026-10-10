@@ -3,8 +3,8 @@ import logging
 import os
 from datetime import datetime, timezone
 
-# LogRecord'un kendi alanları; bunların dışındaki her şey "extra" ile gelen ek alandır.
-# color_message: uvicorn'un terminal renk kodlu kopyası, JSON'da gereksiz.
+# Built-in LogRecord attributes; anything else was passed via "extra".
+# color_message: uvicorn's copy with terminal color codes, not needed in JSON.
 _RESERVED = set(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {
     "message",
     "asctime",
@@ -13,7 +13,7 @@ _RESERVED = set(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {
 
 
 class JsonFormatter(logging.Formatter):
-    """Her log kaydını tek satırlık bir JSON objesine çevirir."""
+    """Turns every log record into a single-line JSON object."""
 
     def format(self, record):
         entry = {
@@ -40,7 +40,7 @@ def setup_logging():
     root.handlers = [handler]
     root.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
-    # Uvicorn'un kendi düz metin handler'larını kaldır, loglar root'tan JSON olarak çıksın
+    # Remove uvicorn's plain-text handlers so its logs go through the root logger as JSON
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         logger = logging.getLogger(name)
         logger.handlers = []

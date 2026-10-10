@@ -1,6 +1,6 @@
 import os
 
-# main.py import edilirken diskte data/fleet.db oluşmasın diye bellek içi DB kullan
+# Use an in-memory DB so importing main.py does not create data/fleet.db on disk
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 
 import pytest  # noqa: E402
@@ -14,7 +14,7 @@ from main import app  # noqa: E402
 
 @pytest.fixture
 def client(tmp_path):
-    """Her test için ayrı, geçici bir SQLite veritabanı."""
+    """A separate, temporary SQLite database for each test."""
     engine = create_engine(
         f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False}
     )

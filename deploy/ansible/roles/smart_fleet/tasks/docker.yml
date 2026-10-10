@@ -1,5 +1,5 @@
 ---
-# Docker'ın resmi apt deposundan kurulum (Ubuntu)
+# Install from Docker's official apt repository (Ubuntu)
 - name: Install prerequisites
   ansible.builtin.apt:
     name:

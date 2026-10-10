@@ -24,15 +24,15 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
 
-# --- HTTP metrikleri ve istek logu için middleware ---
+# --- Middleware for HTTP metrics and request logs ---
 @app.middleware("http")
 async def observability_middleware(request: Request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
     duration = time.perf_counter() - start
 
-    # Gerçek URL (/vehicles/42/data) yerine route şablonunu (/vehicles/{vehicle_id}/data)
-    # kullanıyoruz, yoksa her araç ID'si için yeni bir zaman serisi oluşur.
+    # Use the route template (/vehicles/{vehicle_id}/data) instead of the raw URL
+    # (/vehicles/42/data); otherwise every vehicle ID would create a new time series.
     route = request.scope.get("route")
     path = route.path if route else "unmatched"
 
@@ -50,7 +50,7 @@ async def observability_middleware(request: Request, call_next):
     return response
 
 
-# --- Gelen veri için şablonlar ---
+# --- Request schemas ---
 class VehicleCreate(BaseModel):
     name: str
 
@@ -60,7 +60,7 @@ class SensorData(BaseModel):
     status: str
 
 
-# --- Endpoint 1: Araç ekle ---
+# --- Endpoint 1: add a vehicle ---
 @app.post("/vehicles")
 def add_vehicle(data: VehicleCreate, db: Session = Depends(get_db)):
     vehicle = Vehicle(name=data.name)
@@ -70,21 +70,21 @@ def add_vehicle(data: VehicleCreate, db: Session = Depends(get_db)):
     return vehicle
 
 
-# --- Endpoint 2: Sensör verisi gönder ---
+# --- Endpoint 2: send sensor data ---
 @app.post("/vehicles/{vehicle_id}/data")
 def send_data(vehicle_id: int, data: SensorData, db: Session = Depends(get_db)):
     vehicle = db.get(Vehicle, vehicle_id)
     if vehicle is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
-    # Veriyi kaydet ve aracın son durumunu güncelle
+    # Store the reading and update the vehicle's latest status
     reading = SensorLog(vehicle_id=vehicle_id, temperature=data.temperature, status=data.status)
     db.add(reading)
     vehicle.status = data.status
     metrics.SENSOR_READINGS.labels(vehicle_id).inc()
     metrics.VEHICLE_TEMPERATURE.labels(vehicle_id).set(data.temperature)
 
-    # Alert logic — asıl fark burada
+    # Alert logic
     if data.temperature > ALERT_TEMP_THRESHOLD:
         alert = Alert(vehicle_id=vehicle_id, reason=f"Yüksek sıcaklık: {data.temperature}°C")
         db.add(alert)
@@ -116,13 +116,13 @@ def send_data(vehicle_id: int, data: SensorData, db: Session = Depends(get_db)):
     return {"message": "Veri kaydedildi", "alerts_checked": True}
 
 
-# --- Endpoint 3: Tüm araçları listele ---
+# --- Endpoint 3: list all vehicles ---
 @app.get("/vehicles")
 def list_vehicles(db: Session = Depends(get_db)):
     return db.query(Vehicle).all()
 
 
-# --- Endpoint 4: Araç durumu ---
+# --- Endpoint 4: vehicle status ---
 @app.get("/vehicles/{vehicle_id}/status")
 def get_status(vehicle_id: int, db: Session = Depends(get_db)):
     logs = db.query(SensorLog).filter(SensorLog.vehicle_id == vehicle_id).all()
@@ -134,7 +134,7 @@ def get_alerts(db: Session = Depends(get_db)):
     return db.query(Alert).all()
 
 
-# --- Gözlemlenebilirlik ---
+# --- Observability ---
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
     try:

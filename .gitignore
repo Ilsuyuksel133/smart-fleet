@@ -27,3 +27,4 @@ deploy/ansible/inventory.ini
 *.tfstate.*
 tfplan
 crash.log
+AGENT_PLAN.md

@@ -5,7 +5,7 @@ from logging_config import JsonFormatter
 
 
 def formatted(record):
-    """Kaydı uygulamanın kullandığı formatter'dan geçirip JSON olarak çöz."""
+    """Format the record with the app's formatter and parse it as JSON."""
     return json.loads(JsonFormatter().format(record))
 
 
