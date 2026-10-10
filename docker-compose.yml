@@ -1,6 +1,6 @@
 name: smart-fleet
 
-# Tüm container'lar için log rotation: dosya başına 10 MB, en fazla 3 dosya (disk dolmasın)
+# Log rotation for all containers: 10 MB per file, at most 3 files (keeps the disk from filling up)
 x-logging: &default-logging
   driver: json-file
   options:
@@ -77,7 +77,7 @@ services:
       - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?set GF_SECURITY_ADMIN_PASSWORD in .env}
-      # Giriş yapmadan sadece görüntüleme (demo için)
+      # Read-only access without login (for demos)
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
     volumes:
@@ -105,7 +105,7 @@ services:
     logging: *default-logging
     image: grafana/alloy:v1.20.1
     ports:
-      - "12345:12345" # Alloy arayüzü (pipeline'ı görmek için)
+      - "12345:12345" # Alloy UI (to inspect the pipeline)
     command:
       - run
       - --server.http.listen-addr=0.0.0.0:12345
@@ -113,7 +113,7 @@ services:
       - /etc/alloy/config.alloy
     volumes:
       - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
-      # Container loglarını okumak için Docker socket (read-only mount)
+      # Docker socket to read container logs (read-only mount)
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - loki

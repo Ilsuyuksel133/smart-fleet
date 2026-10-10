@@ -1,30 +1,30 @@
 from prometheus_client import Counter, Gauge, Histogram
 
-# --- İş (domain) metrikleri ---
+# --- Domain metrics ---
 SENSOR_READINGS = Counter(
     "fleet_sensor_readings_total",
-    "Alınan sensör okuması sayısı",
+    "Number of sensor readings received",
     ["vehicle_id"],
 )
 ALERTS = Counter(
     "fleet_alerts_total",
-    "Üretilen alert sayısı",
+    "Number of alerts created",
     ["type"],  # high_temperature | abnormal_status
 )
 VEHICLE_TEMPERATURE = Gauge(
     "fleet_vehicle_temperature_celsius",
-    "Araçtan okunan son sıcaklık",
+    "Last temperature reported by the vehicle",
     ["vehicle_id"],
 )
 
 # --- HTTP metrikleri ---
 HTTP_REQUESTS = Counter(
     "http_requests_total",
-    "HTTP istek sayısı",
+    "Number of HTTP requests",
     ["method", "path", "status"],
 )
 HTTP_REQUEST_DURATION = Histogram(
     "http_request_duration_seconds",
-    "HTTP istek süresi (saniye)",
+    "HTTP request duration in seconds",
     ["method", "path"],
 )

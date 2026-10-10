@@ -12,7 +12,7 @@
       smart_fleet_grafana_admin_password must be set.
     quiet: true
 
-# 1) Docker Engine + Compose plugin: kuruluysa dokunma
+# 1) Docker Engine + Compose plugin: leave them alone if already installed
 - name: Check whether Docker Compose is installed
   ansible.builtin.command: docker compose version
   register: smart_fleet_compose_check
@@ -23,14 +23,14 @@
   ansible.builtin.include_tasks: docker.yml
   when: smart_fleet_compose_check.rc != 0
 
-# 2) Uygulama klasörü
+# 2) Application directory
 - name: Create application directory
   ansible.builtin.file:
     path: "{{ smart_fleet_app_dir }}"
     state: directory
     mode: "0755"
 
-# 3) Compose dosyaları, monitoring ayarları ve .env
+# 3) Compose files, monitoring configuration and .env
 - name: Copy Docker Compose files
   ansible.builtin.copy:
     src: "{{ smart_fleet_repo_root }}/{{ item }}"
@@ -51,9 +51,9 @@
   ansible.builtin.template:
     src: env.j2
     dest: "{{ smart_fleet_app_dir }}/.env"
-    mode: "0600" # şifre içeriyor, sadece root okuyabilir
+    mode: "0600" # contains a password, readable by root only
 
-# 4) Stack'i GHCR imajlarıyla başlat
+# 4) Start the stack with the GHCR images
 - name: Start the stack with Docker Compose
   community.docker.docker_compose_v2:
     project_src: "{{ smart_fleet_app_dir }}"
@@ -66,7 +66,7 @@
     state: present
     wait: false
 
-# 5) API sağlıklı olana kadar bekle
+# 5) Wait until the API is healthy
 - name: Wait for the API health check
   ansible.builtin.uri:
     url: http://localhost:8000/health

@@ -7,7 +7,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Aynı branch'e yeni commit gelince eski çalışmayı iptal et
+# Cancel older runs when a new commit is pushed to the same branch
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -60,7 +60,7 @@ jobs:
       matrix:
         service: [api, dashboard, simulator]
     env:
-      # Sadece main'e push'ta imajları GHCR'a gönder, PR'larda sadece build et
+      # Push images to GHCR only on pushes to main; pull requests only build
       PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v7
@@ -180,7 +180,7 @@ jobs:
   terraform:
     runs-on: ubuntu-latest
     services:
-      # Lokal AWS emülatörü: gerçek AWS hesabı yok, sahte credential ile çalışır
+      # Local AWS emulator: no real AWS account, works with fake credentials
       moto:
         image: motoserver/moto:5.2.3
         ports:

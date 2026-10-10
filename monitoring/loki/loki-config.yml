@@ -1,4 +1,4 @@
-# Tek binary (monolithic) Loki: lokal disk, 7 günlük saklama
+# Single-binary (monolithic) Loki: local disk, 7-day retention
 auth_enabled: false
 
 server:
@@ -28,8 +28,8 @@ schema_config:
         period: 24h
 
 limits_config:
-  retention_period: 168h # 7 gün
-  # Loki 3 otomatik "service_name" label'ı ekler; "service" ile aynı bilgi, kapatıyoruz
+  retention_period: 168h # 7 days
+  # Loki 3 adds a "service_name" label automatically; it duplicates "service", so it is disabled
   discover_service_name: []
 
 compactor:

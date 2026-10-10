@@ -1,6 +1,6 @@
-# Production override: kaynak koddan build etmek yerine GHCR'daki hazır imajları kullan.
-# Kullanım: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-# IMAGE_TAG değişmez bir tag olmalı (ör. sha-1a2b3c4), "latest" değil.
+# Production override: use the prebuilt GHCR images instead of building from source.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# IMAGE_TAG must be an immutable tag (e.g. sha-1a2b3c4), not "latest".
 services:
   api:
     build: !reset null

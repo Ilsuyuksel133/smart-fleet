@@ -1,28 +1,28 @@
 .PHONY: install lint format test up down logs smoke clean
 
-install:  ## Geliştirme bağımlılıklarını kur
+install:  ## Install development dependencies
 	pip install -r requirements-dev.txt
 
-lint:     ## Lint ve format kontrolü
+lint:     ## Lint and format check
 	ruff check . && ruff format --check .
 
-format:   ## Kodu otomatik formatla
+format:   ## Auto-fix and format the code
 	ruff check --fix . && ruff format .
 
-test:     ## Testleri coverage ile çalıştır
+test:     ## Run tests with coverage
 	pytest --cov=api
 
-up:       ## Tüm sistemi build edip başlat
+up:       ## Build and start the whole stack
 	docker compose up -d --build
 
-down:     ## Sistemi durdur (veriler kalır)
+down:     ## Stop the stack (data is kept)
 	docker compose down
 
-logs:     ## Tüm servislerin loglarını takip et
+logs:     ## Follow the logs of all services
 	docker compose logs -f
 
-smoke:    ## Çalışan sisteme smoke test
+smoke:    ## Smoke test the running stack
 	./scripts/smoke_test.sh
 
-clean:    ## Sistemi ve volume'ları sil, cache'leri temizle
+clean:    ## Remove the stack and its volumes, clear caches
 	docker compose down -v && rm -rf .pytest_cache .ruff_cache .coverage

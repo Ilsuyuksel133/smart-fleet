@@ -1,4 +1,4 @@
-# Build context: repo kökü -> docker build -f simulator/Dockerfile .
+# Build context: repository root -> docker build -f simulator/Dockerfile .
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
