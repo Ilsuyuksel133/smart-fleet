@@ -1,0 +1,4 @@
+---
+# CI'da GHCR'dan çekilmez; bu commit'in kodundan build edilen ":ci" imajları kullanılır
+smart_fleet_image_tag: ci
+smart_fleet_pull_policy: never

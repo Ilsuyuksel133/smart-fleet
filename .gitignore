@@ -20,3 +20,10 @@ data/
 DEVOPS_PLAN.md
 DEVOPS_PLAN_2.md
 deploy/ansible/inventory.ini
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+crash.log

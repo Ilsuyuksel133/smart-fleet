@@ -154,7 +154,7 @@ jobs:
 
       - name: Run playbook (first run)
         run: >-
-          ansible-playbook -i inventory.ci.ini site.yml
+          ansible-playbook -i inventory.localhost.ini site.yml -e @ci-vars.yml
           -e "smart_fleet_grafana_admin_password=$GRAFANA_PASSWORD"
 
       - name: Run smoke test
@@ -163,7 +163,7 @@ jobs:
 
       - name: Run playbook again and check idempotency (changed=0)
         run: |
-          ansible-playbook -i inventory.ci.ini site.yml \
+          ansible-playbook -i inventory.localhost.ini site.yml -e @ci-vars.yml \
             -e "smart_fleet_grafana_admin_password=$GRAFANA_PASSWORD" | tee second-run.log
           grep -qE "localhost +: ok=[0-9]+ +changed=0 +unreachable=0 +failed=0" second-run.log
 
@@ -176,3 +176,63 @@ jobs:
         if: always()
         working-directory: /tmp
         run: docker compose -p smart-fleet down -v
+
+  terraform:
+    runs-on: ubuntu-latest
+    services:
+      # Lokal AWS emülatörü: gerçek AWS hesabı yok, sahte credential ile çalışır
+      moto:
+        image: motoserver/moto:5.2.3
+        ports:
+          - 5000:5000
+    env:
+      TF_IN_AUTOMATION: "1"
+    defaults:
+      run:
+        working-directory: infra/terraform/aws
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.5
+          terraform_wrapper: false
+
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.64.0
+
+      - name: Format check
+        run: terraform fmt -check -recursive -diff
+
+      - name: Init
+        run: terraform init -input=false
+
+      - name: Validate
+        run: terraform validate
+
+      - name: TFLint
+        run: |
+          tflint --init
+          tflint --format compact
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Plan against Moto
+        run: terraform plan -input=false -var-file=emulator.tfvars -out=tfplan
+
+      - name: Apply against Moto
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Check outputs
+        run: |
+          terraform output
+          terraform output -raw instance_id | grep -E '^i-'
+          terraform output -raw security_group_id | grep -E '^sg-'
+
+      - name: Plan again (must show no changes)
+        run: terraform plan -input=false -var-file=emulator.tfvars -detailed-exitcode
+
+      - name: Destroy
+        if: always()
+        run: terraform destroy -input=false -auto-approve -var-file=emulator.tfvars

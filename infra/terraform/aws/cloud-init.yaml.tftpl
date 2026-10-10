@@ -1,0 +1,18 @@
+#cloud-config
+# İlk açılışta çalışır: repoyu çeker ve deploy/ansible playbook'unu localhost'a uygular.
+# Grafana şifresi makinede rastgele üretilir; user_data veya Terraform state'e yazılmaz.
+package_update: true
+packages:
+  - git
+  - python3-venv
+  - openssl
+
+runcmd:
+  - git clone --depth 1 --branch ${repo_ref} ${repo_url} /opt/smart-fleet-src
+  - python3 -m venv /opt/ansible-venv
+  - /opt/ansible-venv/bin/pip install -r /opt/smart-fleet-src/deploy/ansible/requirements.txt
+  - >-
+    cd /opt/smart-fleet-src/deploy/ansible &&
+    /opt/ansible-venv/bin/ansible-playbook -i inventory.localhost.ini site.yml
+    -e smart_fleet_image_tag=${image_tag}
+    -e smart_fleet_grafana_admin_password="$(openssl rand -hex 16)"
