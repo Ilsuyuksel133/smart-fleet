@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+pythonpath = ["api"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["database", "main", "metrics", "models"]

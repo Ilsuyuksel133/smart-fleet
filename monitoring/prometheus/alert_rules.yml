@@ -1,0 +1,29 @@
+groups:
+  - name: fleet
+    rules:
+      - alert: FleetApiDown
+        expr: up{job="fleet-api"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fleet API is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for more than 30 seconds."
+
+      - alert: VehicleOverheating
+        expr: fleet_vehicle_temperature_celsius > 90
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Vehicle {{ $labels.vehicle_id }} is overheating"
+          description: "Vehicle {{ $labels.vehicle_id }} reports {{ $value }}°C (threshold 90°C) for more than 30 seconds."
+
+      - alert: HighAlertRate
+        expr: sum(rate(fleet_alerts_total[5m])) > 0.5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High fleet alert rate"
+          description: "The fleet is producing {{ $value | printf \"%.2f\" }} alerts per second (threshold 0.5/s)."

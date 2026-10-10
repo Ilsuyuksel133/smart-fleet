@@ -1,0 +1,20 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Local data
+*.db
+data/
+
+# Secrets
+.env
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# Local notes
+DEVOPS_PLAN.md
