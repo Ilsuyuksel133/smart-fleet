@@ -67,9 +67,7 @@ Older runs on the same branch are cancelled automatically, and the workflow runs
 
 ## Monitoring
 
-<!-- Add a screenshot of the Grafana dashboard as docs/images/grafana.png and uncomment:
 ![Grafana Fleet Overview dashboard](docs/images/grafana.png)
--->
 
 ### Metrics (`GET /metrics`)
 
