@@ -5,7 +5,17 @@ global:
 rule_files:
   - alert_rules.yml
 
+# Firing alerts go to Alertmanager, which forwards them to the incident agent
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
 scrape_configs:
   - job_name: fleet-api
     static_configs:
       - targets: ["api:8000"]
+
+  - job_name: fleet-agent
+    static_configs:
+      - targets: ["agent:8100"]

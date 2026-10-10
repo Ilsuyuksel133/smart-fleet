@@ -37,6 +37,7 @@ services:
       - "8501:8501"
     environment:
       API_URL: http://api:8000
+      AGENT_URL: http://agent:8100
     depends_on:
       api:
         condition: service_healthy
@@ -135,6 +136,10 @@ services:
       LOKI_URL: http://loki:3100
       API_URL: http://api:8000
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AGENT_DATABASE_URL: sqlite:////app/data/agent.db
+    volumes:
+      # The agent's own database, separate from the API's fleet-data volume
+      - agent-data:/app/data
     extra_hosts:
       # Docker Desktop resolves host.docker.internal by itself; Linux needs this mapping
       - "host.docker.internal:host-gateway"
@@ -146,8 +151,23 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  alertmanager:
+    logging: *default-logging
+    image: prom/alertmanager:v0.34.1
+    ports:
+      - "9093:9093"
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    restart: unless-stopped
+
 volumes:
   fleet-data:
   prometheus-data:
   grafana-data:
   loki-data:
+  agent-data:
+  alertmanager-data:

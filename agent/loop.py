@@ -20,6 +20,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from agent import metrics
 from agent.config import Settings
 from agent.llm import LLMProvider, Message, ToolCall, get_provider
 from agent.report import Alert, Evidence, RCAReport, RootCauseCategory, parse_model_report
@@ -193,6 +194,7 @@ class Investigator:
         else:
             seen_calls.add(key)
             result = run_tool(self.tools, call.name, call.arguments)
+            metrics.TOOL_CALLS.labels(call.name).inc()
             trace.append(Evidence(tool=call.name, query=key[1], finding=short(result, 300)))
 
         log.info(

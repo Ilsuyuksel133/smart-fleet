@@ -1,0 +1,19 @@
+# Sends firing alerts to the incident agent, which investigates them in the background.
+route:
+  receiver: incident-agent
+  # One notification per alert name: four overheating vehicles become one investigation
+  group_by: [alertname]
+  # Wait a little so alerts that start together are sent in the same group
+  group_wait: 30s
+  # A group that changes (e.g. one more vehicle) is re-sent at most every 5 minutes
+  group_interval: 5m
+  # An alert that keeps firing (HighAlertRate does, with the simulator running)
+  # is re-sent only every 4 hours, so it cannot keep the local model busy
+  repeat_interval: 4h
+
+receivers:
+  - name: incident-agent
+    webhook_configs:
+      - url: http://agent:8100/webhook/alertmanager
+        # The agent only investigates firing alerts
+        send_resolved: false
