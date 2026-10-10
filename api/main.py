@@ -11,14 +11,12 @@ from sqlalchemy.orm import Session
 
 import metrics
 from database import engine, get_db
+from logging_config import setup_logging
 from models import Alert, Base, SensorLog, Vehicle
 
 ALERT_TEMP_THRESHOLD = float(os.getenv("ALERT_TEMP_THRESHOLD", "80"))
 
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s %(levelname)s %(message)s",
-)
+setup_logging()
 log = logging.getLogger("fleet-api")
 
 Base.metadata.create_all(bind=engine)
@@ -26,9 +24,9 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
 
-# --- HTTP metrikleri için middleware ---
+# --- HTTP metrikleri ve istek logu için middleware ---
 @app.middleware("http")
-async def prometheus_middleware(request: Request, call_next):
+async def observability_middleware(request: Request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
     duration = time.perf_counter() - start
@@ -40,6 +38,15 @@ async def prometheus_middleware(request: Request, call_next):
 
     metrics.HTTP_REQUESTS.labels(request.method, path, response.status_code).inc()
     metrics.HTTP_REQUEST_DURATION.labels(request.method, path).observe(duration)
+    log.info(
+        "request",
+        extra={
+            "method": request.method,
+            "path": path,
+            "status": response.status_code,
+            "duration_ms": round(duration * 1000, 2),
+        },
+    )
     return response
 
 
@@ -82,13 +89,28 @@ def send_data(vehicle_id: int, data: SensorData, db: Session = Depends(get_db)):
         alert = Alert(vehicle_id=vehicle_id, reason=f"Yüksek sıcaklık: {data.temperature}°C")
         db.add(alert)
         metrics.ALERTS.labels("high_temperature").inc()
-        log.warning("Alert: vehicle %s high temperature %.1f°C", vehicle_id, data.temperature)
+        log.warning(
+            "alert created",
+            extra={
+                "vehicle_id": vehicle_id,
+                "alert_type": "high_temperature",
+                "temperature": data.temperature,
+            },
+        )
 
     if data.status != "OK":
         alert = Alert(vehicle_id=vehicle_id, reason=f"Anormal durum: {data.status}")
         db.add(alert)
         metrics.ALERTS.labels("abnormal_status").inc()
-        log.warning("Alert: vehicle %s abnormal status %s", vehicle_id, data.status)
+        log.warning(
+            "alert created",
+            extra={
+                "vehicle_id": vehicle_id,
+                "alert_type": "abnormal_status",
+                "temperature": data.temperature,
+                "vehicle_status": data.status,
+            },
+        )
 
     db.commit()
     return {"message": "Veri kaydedildi", "alerts_checked": True}
