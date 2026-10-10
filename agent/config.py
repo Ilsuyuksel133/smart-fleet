@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     max_series: int = 10
     max_tool_output_chars: int = 4000
 
+    # The agent's own database for investigations and reports
+    agent_database_url: str = "sqlite:///./data/agent.db"
+    # Skip an alert from Alertmanager if it was investigated less than this ago
+    investigation_cooldown_seconds: float = 900.0
+
     log_level: str = "INFO"
 
 

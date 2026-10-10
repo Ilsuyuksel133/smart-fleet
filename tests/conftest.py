@@ -1,7 +1,12 @@
 import os
+import tempfile
 
 # Use an in-memory DB so importing main.py does not create data/fleet.db on disk
 os.environ.setdefault("DATABASE_URL", "sqlite://")
+# Same for the agent's own database: a throwaway file instead of ./data/agent.db
+os.environ.setdefault(
+    "AGENT_DATABASE_URL", f"sqlite:///{tempfile.mkdtemp(prefix='agent-test-')}/agent.db"
+)
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

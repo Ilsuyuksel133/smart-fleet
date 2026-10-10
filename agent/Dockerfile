@@ -15,8 +15,12 @@ COPY agent/ ./agent/
 # The runbook is read by the get_runbook tool (read-only, baked into the image)
 COPY docs/RUNBOOK.md ./docs/RUNBOOK.md
 
-RUN useradd --create-home app
+# Non-root user; the agent's SQLite database lives under /app/data
+RUN useradd --create-home app \
+    && mkdir -p /app/data \
+    && chown -R app:app /app/data
 USER app
+VOLUME ["/app/data"]
 
 EXPOSE 8100
 
