@@ -1,0 +1,10 @@
+name: control
+description: >
+  Healthy system, but the agent is asked to investigate FleetApiDown anyway
+  (a false alarm). A good agent finds no problem.
+alert: FleetApiDown
+expected_category: unknown
+# "unknown" is the best answer, but any category with low confidence also counts
+accept_low_confidence: true
+simulator_mode: calm
+settle_seconds: 60

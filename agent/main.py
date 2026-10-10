@@ -106,7 +106,11 @@ def create_app(
     def health():
         # Liveness only: the agent must stay up even when Ollama is not running,
         # so the model is deliberately not contacted here.
-        return {"status": "ok", "llm_provider": provider.name}
+        return {
+            "status": "ok",
+            "llm_provider": provider.name,
+            "llm_model": getattr(provider, "model", None),
+        }
 
     @app.get("/metrics")
     def prometheus_metrics():

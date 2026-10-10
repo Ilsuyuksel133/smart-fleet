@@ -9,6 +9,13 @@ from logging_config import setup_logging
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 INTERVAL_SECONDS = float(os.getenv("INTERVAL_SECONDS", "3"))
+# Fault modes for the agent evaluation (eval/). "random" is the normal behaviour.
+#   random:   60-100 °C, 25 % ERROR status (keeps alerts firing, good for demos)
+#   calm:     60-78 °C, always OK (no alerts; clean baseline)
+#   overheat: like calm, but the first vehicle reports 95-100 °C
+#   storm:    calm temperatures, but every vehicle reports ERROR (many alerts)
+SIMULATOR_MODE = os.getenv("SIMULATOR_MODE", "random")
+MODES = ("random", "calm", "overheat", "storm")
 
 setup_logging()
 log = logging.getLogger("simulator")
@@ -39,15 +46,28 @@ def get_vehicle_ids():
     return [v["id"] for v in vehicles]
 
 
+def generate_reading(mode: str, index: int) -> tuple[float, str]:
+    """Temperature and status for the vehicle at position `index` in the list."""
+    if mode == "random":
+        return round(random.uniform(60, 100), 1), random.choice(["OK", "OK", "OK", "ERROR"])
+    calm_temperature = round(random.uniform(60, 78), 1)
+    if mode == "overheat" and index == 0:
+        return round(random.uniform(95, 100), 1), "OK"
+    if mode == "storm":
+        return calm_temperature, "ERROR"
+    return calm_temperature, "OK"
+
+
 def main():
+    if SIMULATOR_MODE not in MODES:
+        raise SystemExit(f"Unknown SIMULATOR_MODE {SIMULATOR_MODE!r}, expected one of {MODES}")
     wait_for_api()
     vehicle_ids = get_vehicle_ids()
-    log.info("simulation started", extra={"vehicle_ids": vehicle_ids})
+    log.info("simulation started", extra={"vehicle_ids": vehicle_ids, "mode": SIMULATOR_MODE})
 
     while True:
-        for vid in vehicle_ids:
-            temp = round(random.uniform(60, 100), 1)
-            status = random.choice(["OK", "OK", "OK", "ERROR"])
+        for index, vid in enumerate(vehicle_ids):
+            temp, status = generate_reading(SIMULATOR_MODE, index)
             try:
                 requests.post(
                     f"{API_URL}/vehicles/{vid}/data",

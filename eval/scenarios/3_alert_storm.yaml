@@ -1,0 +1,7 @@
+name: alert_storm
+description: Every vehicle reports ERROR every few seconds, so HighAlertRate fires.
+alert: HighAlertRate
+expected_category: alert_storm
+simulator_mode: storm
+wait_for_alert: HighAlertRate
+timeout_seconds: 300
