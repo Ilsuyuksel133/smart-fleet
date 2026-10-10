@@ -1,4 +1,5 @@
 ---
-# CI'da GHCR'dan çekilmez; bu commit'in kodundan build edilen ":ci" imajları kullanılır
+# CI'da bu commit'in kodundan build edilen ":ci" imajları kullanılır.
+# Pull policy varsayılan "missing" kalır: ":ci" imajları runner'da zaten var, çekilmez;
+# Loki, Grafana gibi üçüncü parti imajlar ise runner'da olmadığı için indirilir.
 smart_fleet_image_tag: ci
-smart_fleet_pull_policy: never
