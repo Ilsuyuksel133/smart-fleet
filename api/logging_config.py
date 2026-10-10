@@ -41,7 +41,13 @@ def setup_logging():
     root.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
     # Remove uvicorn's plain-text handlers so its logs go through the root logger as JSON
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    for name in ("uvicorn", "uvicorn.error"):
         logger = logging.getLogger(name)
         logger.handlers = []
         logger.propagate = True
+
+    # Requests are already logged once by our own middleware, so uvicorn's access
+    # log stays off (otherwise every request would be logged twice)
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.handlers = []
+    access_logger.propagate = False
