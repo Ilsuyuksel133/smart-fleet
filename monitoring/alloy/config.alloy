@@ -1,0 +1,70 @@
+// Docker container loglarını toplayıp Loki'ye gönderir.
+
+// 1) Sadece bu compose projesinin container'larını bul
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=smart-fleet"]
+  }
+}
+
+// 2) Label'lar: sadece düşük cardinality'li "service" (compose servis adı)
+discovery.relabel "containers" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+// 3) Container loglarını Docker API'sinden oku
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.process.levels.receiver]
+}
+
+// 4) Log satırından "level" alanını çıkarıp label yap.
+//    vehicle_id, path gibi alanlar label OLMAZ; sorguda "| json" ile okunur.
+loki.process "levels" {
+  // Bizim servislerimiz JSON log yazıyor
+  stage.match {
+    selector = "{service=~\"api|simulator\"}"
+
+    stage.json {
+      expressions = { level = "" }
+    }
+  }
+
+  // Prometheus, Grafana, Loki ve Alloy logfmt (level=info ...) yazıyor
+  stage.match {
+    selector = "{service!~\"api|simulator\"}"
+
+    stage.logfmt {
+      mapping = { level = "" }
+    }
+  }
+
+  // Seviyeleri tek tipe indir: INFO -> info, warn -> warning
+  stage.template {
+    source   = "level"
+    template = "{{ if eq (ToLower .Value) \"warn\" }}warning{{ else }}{{ ToLower .Value }}{{ end }}"
+  }
+
+  stage.labels {
+    values = { level = "" }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+// 5) Loki'ye gönder
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
