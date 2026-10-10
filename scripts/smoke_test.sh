@@ -35,7 +35,9 @@ curl -fsS -X POST "$API_URL/vehicles/$vehicle_id/data" \
 log "Sent 95°C reading"
 
 # 4) Bu araç için alert oluştu mu?
-if curl -fsS "$API_URL/alerts" | grep -qE "\"vehicle_id\":$vehicle_id[,}]"; then
+# Önce değişkene al: "curl | grep -q" pipefail ile SIGPIPE yüzünden yanlış FAIL verebilir
+alerts=$(curl -fsS "$API_URL/alerts")
+if grep -qE "\"vehicle_id\":${vehicle_id}[,}]" <<< "$alerts"; then
   log "Alert created for vehicle $vehicle_id"
 else
   fail "No alert found for vehicle $vehicle_id"
@@ -43,9 +45,9 @@ fi
 
 # 5) Metrik sayaçları görünüyor mu?
 metrics=$(curl -fsS "$API_URL/metrics")
-echo "$metrics" | grep -q "fleet_sensor_readings_total{vehicle_id=\"$vehicle_id\"}" \
+grep -q "fleet_sensor_readings_total{vehicle_id=\"${vehicle_id}\"}" <<< "$metrics" \
   || fail "fleet_sensor_readings_total missing for vehicle $vehicle_id"
-echo "$metrics" | grep -q 'fleet_alerts_total{type="high_temperature"}' \
+grep -q 'fleet_alerts_total{type="high_temperature"}' <<< "$metrics" \
   || fail "fleet_alerts_total missing"
 log "Metrics OK"
 
