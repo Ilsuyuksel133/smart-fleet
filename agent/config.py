@@ -5,6 +5,7 @@ Every field can be overridden with an environment variable of the same name
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings
@@ -23,6 +24,17 @@ class Settings(BaseSettings):
     prometheus_url: str = "http://prometheus:9090"
     loki_url: str = "http://loki:3100"
     api_url: str = "http://api:8000"
+
+    # Inside the image the runbook is copied to /app/docs, next to the package;
+    # in the repository it is docs/RUNBOOK.md. Both resolve to the same relative path.
+    runbook_path: Path = Path(__file__).resolve().parent.parent / "docs" / "RUNBOOK.md"
+
+    # Tool limits: keep the model's context small and every call bounded in time
+    tool_timeout_seconds: float = 10.0
+    max_query_minutes: int = 60
+    max_log_lines: int = 50
+    max_series: int = 10
+    max_tool_output_chars: int = 4000
 
     log_level: str = "INFO"
 
