@@ -10,7 +10,7 @@ format:   ## Auto-fix and format the code
 	ruff check --fix . && ruff format .
 
 test:     ## Run tests with coverage
-	pytest --cov=api
+	pytest --cov=api --cov=agent
 
 up:       ## Build and start the whole stack
 	docker compose up -d --build

@@ -3,3 +3,6 @@
 # The pull policy stays at the default "missing": the ":ci" images already exist on
 # the runner and are not pulled, while third-party images such as Loki or Grafana are.
 smart_fleet_image_tag: ci
+
+# No model on the CI runner: the agent uses scripted responses
+smart_fleet_llm_provider: fake

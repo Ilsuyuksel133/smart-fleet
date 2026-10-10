@@ -33,7 +33,7 @@ loki.source.docker "containers" {
 loki.process "levels" {
   // Our own services write JSON logs
   stage.match {
-    selector = "{service=~\"api|simulator\"}"
+    selector = "{service=~\"api|simulator|agent\"}"
 
     stage.json {
       expressions = { level = "" }
@@ -42,7 +42,7 @@ loki.process "levels" {
 
   // Prometheus, Grafana, Loki and Alloy write logfmt (level=info ...)
   stage.match {
-    selector = "{service!~\"api|simulator\"}"
+    selector = "{service!~\"api|simulator|agent\"}"
 
     stage.logfmt {
       mapping = { level = "" }

@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-pythonpath = ["api"]
+pythonpath = ["api", "."]
 testpaths = ["tests"]
 
 [tool.ruff]
@@ -11,4 +11,4 @@ extend-exclude = ["venv"]
 select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["database", "logging_config", "main", "metrics", "models"]
+known-first-party = ["agent", "database", "logging_config", "main", "metrics", "models"]

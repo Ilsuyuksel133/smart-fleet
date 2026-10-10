@@ -119,6 +119,33 @@ services:
       - loki
     restart: unless-stopped
 
+  agent:
+    logging: *default-logging
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    ports:
+      - "8100:8100"
+    environment:
+      # "ollama" uses the local model on the host; CI sets "fake" (scripted responses)
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:8b}
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+      API_URL: http://api:8000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    extra_hosts:
+      # Docker Desktop resolves host.docker.internal by itself; Linux needs this mapping
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
 volumes:
   fleet-data:
   prometheus-data:
