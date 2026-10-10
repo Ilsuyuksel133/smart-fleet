@@ -27,14 +27,14 @@ def test_high_temperature_creates_alert(client, vehicle_id):
     client.post(f"/vehicles/{vehicle_id}/data", json={"temperature": 95, "status": "OK"})
     reasons = alert_reasons(client)
     assert len(reasons) == 1
-    assert "Yüksek sıcaklık" in reasons[0]
+    assert "High temperature" in reasons[0]
 
 
 def test_abnormal_status_creates_alert_and_updates_vehicle(client, vehicle_id):
     client.post(f"/vehicles/{vehicle_id}/data", json={"temperature": 70, "status": "ERROR"})
     reasons = alert_reasons(client)
     assert len(reasons) == 1
-    assert "Anormal durum" in reasons[0]
+    assert "Abnormal status" in reasons[0]
     assert client.get("/vehicles").json()[0]["status"] == "ERROR"
 
 

@@ -11,7 +11,7 @@ Useful links: API docs http://localhost:8000/docs · Prometheus alerts http://lo
 
 **Symptom**
 - Prometheus alert `FleetApiDown` is firing; the "API status" panel in Grafana shows **DOWN**.
-- Dashboard shows "API'ye ulaşılamıyor", simulator logs connection errors.
+- Dashboard shows "Cannot reach the API", simulator logs connection errors.
 
 **Possible causes**
 - The `api` container stopped or crashed (bad deploy, Python exception at startup).
