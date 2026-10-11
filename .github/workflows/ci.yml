@@ -33,6 +33,7 @@ jobs:
             requirements-dev.txt
             api/requirements.txt
             agent/requirements.txt
+            simulator/requirements.txt
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
