@@ -24,32 +24,43 @@ Alertmanager is paused during the evaluation, so it does not start competing inv
 
 ## Results
 
-See [results.md](results.md) (generated) and [results.json](results.json) (raw).
+See [results.md](results.md) (generated) and [results.json](results.json) (raw) for the latest run.
 
-Latest run: `qwen3:8b`, think off, Apple M2 / 16 GB. **11 of 12 runs correct (92%).**
+All runs: `qwen3:8b`, think off, Apple M2 / 16 GB, 3 runs per scenario.
 
-| Scenario | Correct | Avg duration |
-|---|---|---|
-| api_down | 2/3 | 84 s |
-| overheating | 3/3 | 87 s |
-| alert_storm | 3/3 | 41 s |
-| control | 3/3 | 40 s |
+| Scenario | Run A | Run B | Run C (latest) |
+|---|---|---|---|
+| api_down | 2/3 | 2/3 | 3/3 |
+| overheating | 3/3 | 2/3 | 0/3 |
+| alert_storm | 3/3 | 3/3 | 3/3 |
+| control | 3/3 | 2/3 | 3/3 |
+| **Total** | **11/12 (92%)** | **9/12 (75%)** | **9/12 (75%)** |
 
-### The one failure
+Code changes between the runs:
+- **Run B:** the generated tokens are capped and a timed-out LLM call is retried once.
+- **Run C:** the report retry uses structured output, rejected reports are logged, and the tool description lists the `job` values.
 
-In `api_down` run 3, the agent had already collected the right evidence:
-- `get_service_health` showed the API as DOWN
-- it had read the runbook
+Differences of two or three answers between runs of 12 are within what small samples of a non-deterministic model show, so no single run should be read as a regression or an improvement. **Over all runs: 29/36 (81%).**
 
-Then its 4th LLM call hit the 120 s Ollama timeout (`stop_reason: llm_error`). Earlier calls took 2–42 s. As designed, the loop did not crash: it wrote an `unknown` / low report that kept the evidence. Still, one slow model response lost an otherwise correct investigation. Possible improvements:
-- cap the number of generated tokens
-- retry a timed-out call once
+### Failures and what they show
+
+| Run | Scenario | Result | What happened |
+|---|---|---|---|
+| A | api_down | unknown / low (`llm_error`) | The right evidence was collected, then one LLM call exceeded the 120 s timeout. Led to the token cap and retry in phase 5. |
+| B | api_down | unknown / low (`invalid_output`) | The right evidence was collected (API down, `up` = 0), but the final answer was invalid JSON twice. |
+| B | overheating | unknown / medium | Over-cautious: it saw 97.9 °C for the alerted vehicle but considered the evidence inconclusive. |
+| B | control | service_down / medium | It queried `up{job="api"}` (the job is called `fleet-api`), got no data and concluded the API was not scraped, contradicting its own health check. |
+| C | overheating (all 3) | unknown / medium | Every time it queried `fleet_alerts_total{type="high_temperature", vehicle_id="1"}`. That metric has no `vehicle_id` label, so the query returned no data. The model read this as "no high-temperature alerts" and called the evidence contradictory, although it had seen the temperature at 95–100 °C. |
+
+The loop's guard rails held in every run: no crash, no endless loop, and every report contains the evidence that was collected. In run C no answer had to be retried for invalid JSON. The remaining failures are reasoning errors of a small local model.
+
+The most frequent pattern (4 of 7 failures) is the same: **a query with a label that does not exist returns "no data", and the model takes that as evidence.** A possible next step is a "no data" message that reminds the model to check the label names.
 
 ### Caveats
 
-- **Small sample:** 3 runs per scenario on a single machine. The accuracy is indicative, not statistically significant.
+- **Small sample:** 3 runs per scenario on a single machine. The two runs differ by three answers, so treat the numbers as indicative only.
 - **Clear-cut faults:** each scenario injects exactly one fault, and the categories map closely to the alert names. Real incidents are messier.
-- **Summaries vary in quality:** a correct category does not mean the explanation is perfect. For example, control run 2 contains a wrong PromQL label (`up{job="api"}`) in its reasoning, although the conclusion (`unknown`, low) is right.
+- **Summaries vary in quality:** a correct category does not mean the explanation is perfect.
 
 ## Problems found while building the evaluation
 
