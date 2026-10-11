@@ -108,6 +108,10 @@ flowchart LR
     AG -- /metrics --> P
 ```
 
+![Incidents page: three reports triggered by Alertmanager and the full FleetApiDown report with evidence](docs/images/incidents.png)
+
+*The Incidents page after three real alerts, each investigated automatically with `qwen3:8b`. The selected report shows the root cause, the suggested runbook commands (never executed by the agent) and the evidence from each tool call.*
+
 ### The agent loop
 
 [`agent/loop.py`](agent/loop.py) is a plain-Python implementation of tool calling, without an agent framework:
