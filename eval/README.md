@@ -24,32 +24,39 @@ Alertmanager is paused during the evaluation, so it does not start competing inv
 
 ## Results
 
-See [results.md](results.md) (generated) and [results.json](results.json) (raw).
+See [results.md](results.md) (generated) and [results.json](results.json) (raw) for the latest run.
 
-Latest run: `qwen3:8b`, think off, Apple M2 / 16 GB. **11 of 12 runs correct (92%).**
+All runs: `qwen3:8b`, think off, Apple M2 / 16 GB, 3 runs per scenario.
 
-| Scenario | Correct | Avg duration |
+| Scenario | Run A | Run B (latest) |
 |---|---|---|
-| api_down | 2/3 | 84 s |
-| overheating | 3/3 | 87 s |
-| alert_storm | 3/3 | 41 s |
-| control | 3/3 | 40 s |
+| api_down | 2/3 | 2/3 |
+| overheating | 3/3 | 2/3 |
+| alert_storm | 3/3 | 3/3 |
+| control | 3/3 | 2/3 |
+| **Total** | **11/12 (92%)** | **9/12 (75%)** |
 
-### The one failure
+Run B ran on the code of phase 5, which caps generated tokens and retries a timed-out LLM call once. None of its failures was a timeout. The drop from 92% to 75% is within what two small samples of a non-deterministic model can show; it should not be read as a regression or an improvement. **Over both runs: 20/24 (83%).**
 
-In `api_down` run 3, the agent had already collected the right evidence:
-- `get_service_health` showed the API as DOWN
-- it had read the runbook
+### Failures and what they show
 
-Then its 4th LLM call hit the 120 s Ollama timeout (`stop_reason: llm_error`). Earlier calls took 2–42 s. As designed, the loop did not crash: it wrote an `unknown` / low report that kept the evidence. Still, one slow model response lost an otherwise correct investigation. Possible improvements:
-- cap the number of generated tokens
-- retry a timed-out call once
+| Run | Scenario | Result | What happened |
+|---|---|---|---|
+| A | api_down | unknown / low (`llm_error`) | The right evidence was collected, then one LLM call exceeded the 120 s timeout. Led to the token cap and retry in phase 5. |
+| B | api_down | unknown / low (`invalid_output`) | The right evidence was collected (API down, `up` = 0), but the final answer was invalid JSON twice. |
+| B | overheating | unknown / medium | Over-cautious: it saw 97.9 °C for the alerted vehicle but considered the evidence inconclusive. |
+| B | control | service_down / medium | It queried `up{job="api"}` (the job is called `fleet-api`), got no data and concluded the API was not scraped, contradicting its own health check. |
+
+The loop's guard rails held in every run: no crash, no endless loop, and every report contains the evidence that was collected. The failures are reasoning and formatting errors of a small local model. Possible next steps:
+- Validate the final JSON with Ollama's structured output (JSON schema) on the retry.
+- Log why a report was rejected.
+- List the values of `job` in the Prometheus tool description.
 
 ### Caveats
 
-- **Small sample:** 3 runs per scenario on a single machine. The accuracy is indicative, not statistically significant.
+- **Small sample:** 3 runs per scenario on a single machine. The two runs differ by three answers, so treat the numbers as indicative only.
 - **Clear-cut faults:** each scenario injects exactly one fault, and the categories map closely to the alert names. Real incidents are messier.
-- **Summaries vary in quality:** a correct category does not mean the explanation is perfect. For example, control run 2 contains a wrong PromQL label (`up{job="api"}`) in its reasoning, although the conclusion (`unknown`, low) is right.
+- **Summaries vary in quality:** a correct category does not mean the explanation is perfect.
 
 ## Problems found while building the evaluation
 
