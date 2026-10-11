@@ -251,3 +251,15 @@ def test_metrics_series_exist_before_the_first_investigation(client):
         assert f'agent_investigations_total{{category="{category}"}}' in metrics
     for tool in ["query_prometheus", "query_loki", "get_runbook", "get_service_health"]:
         assert f'agent_tool_calls_total{{tool="{tool}"}}' in metrics
+
+
+def test_skipped_investigation_is_logged(store, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="fleet-agent")
+    service = make_service(store, scripted_investigation())
+    service.submit(Alert(name="FleetApiDown"), trigger="alertmanager")
+    service.submit(Alert(name="FleetApiDown"), trigger="alertmanager")
+    skipped = [r for r in caplog.records if r.getMessage() == "investigation skipped"]
+    assert len(skipped) == 1
+    assert skipped[0].reason == "already queued or running"
