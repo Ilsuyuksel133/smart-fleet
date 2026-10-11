@@ -172,11 +172,67 @@ The Alloy UI at http://localhost:12345 shows every pipeline component and whethe
 
 ---
 
+## Reading an incident agent report
+
+When an alert fires, the incident agent investigates it automatically (usually within 1–2 minutes) and stores a report. Open it on the **Incidents** page of the dashboard (http://localhost:8501/Incidents) or via `curl -s http://localhost:8100/reports`.
+
+Read a report in this order:
+
+1. **`stop_reason`:** `completed` means the model wrote the report. Anything else means the loop stopped the model and wrote it itself: `max_steps`, `timeout`, `invalid_output` or `llm_error`. Such a report is always `unknown` / low; only its evidence is useful.
+2. **Evidence:** the tool calls and what they returned. This is the part you can trust most, because it is real data from Prometheus, Loki, the runbook and the health check. Check that the conclusion actually follows from it.
+3. **Category and confidence:** `service_down`, `sensor_anomaly`, `alert_storm` or `unknown`, with `low` / `medium` / `high` confidence. Treat `low` and `unknown` as "not investigated", not as "no problem".
+4. **Suggested actions:** proposals, usually copied from this runbook. **Nothing has been executed.** The agent's tools are read-only, so any action is your decision.
+
+## When the agent is wrong
+
+The agent uses a small local model; in the evaluation it found the right category in about 4 of 5 cases (see `eval/README.md`). Typical mistakes:
+- It queries a metric with a label the metric does not have (e.g. `fleet_alerts_total{vehicle_id=...}`), gets "no data" and treats that as evidence.
+- It is over-cautious and answers `unknown` despite clear evidence.
+- It contradicts its own health check.
+
+**What to do**
+1. Ignore the conclusion and **follow this runbook manually** for the alert. The agent's evidence list is a good starting point.
+2. Re-run a suspicious query from the evidence yourself (Prometheus or Grafana Explore). If it returns "no data", check that every label exists for that metric.
+3. Start a new investigation if the situation has changed: the "Investigate" button on the Incidents page or `curl -X POST http://localhost:8100/investigate -H "Content-Type: application/json" -d '{"alert_name": "FleetApiDown"}'`.
+4. Do not act on a suggested action you cannot back with the evidence.
+
+## The agent produces no reports
+
+**Symptom**
+- An alert is firing, but no new report appears on the Incidents page.
+- Reports end with `stop_reason: llm_error`.
+
+**Possible causes**
+- Alertmanager or the agent is down, or Prometheus cannot reach Alertmanager.
+- The alert was skipped on purpose:
+  - it is already queued or running
+  - it was investigated less than 15 minutes ago
+  - Alertmanager re-sends a firing alert only every 4 hours
+- Ollama is not running on the host, or the model is not pulled (→ `llm_error`).
+- `LLM_PROVIDER=fake` is set, so reports are scripted demo reports.
+
+**Checks**
+```bash
+docker compose ps agent alertmanager
+curl -s http://localhost:8100/health                        # provider and model
+curl -s http://localhost:9090/api/v1/alertmanagers          # Prometheus -> Alertmanager
+docker compose logs --tail 50 agent | grep -E "queued|skipped|failed|finished"
+curl -s http://localhost:11434/api/tags                     # Ollama on the host, models pulled
+```
+Agent logs in Grafana Explore → Loki: `{service="agent"} | json | message=~"investigation.*|llm call failed"`.
+
+**Fix**
+- Agent or Alertmanager down: `docker compose up -d agent alertmanager`
+- Ollama: `brew services start ollama` and `ollama pull qwen3:8b`
+- Skipped alert: start it manually with `POST /investigate` (no cooldown for manual requests).
+
+---
+
 ## Resetting the database
 
 **When:** corrupted SQLite file, or you want a clean demo state.
 
-> ⚠️ This deletes all vehicles, sensor logs and alerts, and the Prometheus/Grafana data volumes.
+> ⚠️ This deletes all vehicles, sensor logs and alerts, the incident agent's reports, and the Prometheus/Grafana/Loki data volumes.
 
 ```bash
 docker compose down -v          # stop everything and remove named volumes

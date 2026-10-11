@@ -56,17 +56,24 @@ class InvestigationService:
     def submit(self, alert: Alert, trigger: str, respect_cooldown: bool = True) -> SubmitResult:
         """Queue an investigation unless the same alert is active or cooling down."""
         with self.lock:
-            if alert.name in self.active:
-                return SubmitResult(False, alert.name, reason="already queued or running")
+            skip_reason = None
             last = self.last_started.get(alert.name)
-            if respect_cooldown and last is not None:
+            if alert.name in self.active:
+                skip_reason = "already queued or running"
+            elif respect_cooldown and last is not None:
                 remaining = self.cooldown_seconds - (self.clock() - last)
                 if remaining > 0:
-                    return SubmitResult(
-                        False, alert.name, reason=f"cooldown ({remaining:.0f} s left)"
-                    )
-            self.active.add(alert.name)
-            self.last_started[alert.name] = self.clock()
+                    skip_reason = f"cooldown ({remaining:.0f} s left)"
+            if skip_reason is None:
+                self.active.add(alert.name)
+                self.last_started[alert.name] = self.clock()
+
+        if skip_reason:
+            log.info(
+                "investigation skipped",
+                extra={"alert_name": alert.name, "trigger": trigger, "reason": skip_reason},
+            )
+            return SubmitResult(False, alert.name, reason=skip_reason)
 
         investigation_id = self.store.create(alert, trigger)
         self.queue.put((investigation_id, alert))
