@@ -176,6 +176,26 @@ All tools in [`agent/tools.py`](agent/tools.py) are **read-only** (HTTP GET or r
 
   Grafana shows them in the provisioned "Incident agent" row, together with the agent's step logs from Loki.
 
+### MCP server
+
+The same four read-only tools are also available as an [MCP](https://modelcontextprotocol.io) server ([`agent/mcp_server.py`](agent/mcp_server.py), official MCP Python SDK). Any MCP client, e.g. Claude Desktop, can then query smart-fleet's metrics, logs, runbook and health directly.
+
+The MCP tools call the agent's own tool functions, so the limits, truncation and error handling are identical, and every tool is marked `read_only_hint`. The server speaks stdio and runs inside the agent container, so it reaches Prometheus, Loki and the API on the Compose network:
+
+```json
+{
+  "mcpServers": {
+    "smart-fleet": {
+      "command": "docker",
+      "args": ["compose", "-f", "/absolute/path/to/smart-fleet/docker-compose.yml",
+               "exec", "-T", "agent", "python", "-m", "agent.mcp_server"]
+    }
+  }
+}
+```
+
+This goes into Claude Desktop's `claude_desktop_config.json`. With Docker Desktop on macOS, `command` may need the full path, e.g. `~/.docker/bin/docker` expanded. The stack must be running.
+
 ### Model choice
 
 The default model is **`qwen3:8b`** in Ollama, with "thinking" turned off:
@@ -387,7 +407,7 @@ Other targets: `make up`, `make down`, `make logs`, `make smoke`, `make clean`.
 api/              FastAPI service (main.py, database.py, models.py, metrics.py, logging_config.py) + Dockerfile
 dashboard/        Streamlit dashboard (+ pages/1_Incidents.py) + Dockerfile
 simulator/        Sensor data simulator + Dockerfile
-agent/            AI incident agent: config, LLM providers, tools, loop, report, queue, storage + Dockerfile
+agent/            AI incident agent: config, LLM providers, tools, loop, report, queue, storage, MCP server + Dockerfile
 eval/             Fault-injection evaluation of the agent: scenarios, harness, results
 tests/            pytest suite (isolated SQLite DB per test, mocked HTTP, scripted LLM)
 monitoring/       Prometheus rules, Alertmanager, Loki and Alloy config, Grafana provisioning and dashboard
@@ -400,7 +420,7 @@ docs/             Operational runbook, screenshots
 ## Next steps
 
 - Agent: a "no data" hint in the Prometheus tool (the most frequent reasoning error) and an evaluation of other models
-- Agent: authentication for its endpoints and an MCP server exposing the same read-only tools
+- Agent: authentication for its HTTP endpoints
 - Alertmanager notifications (Slack / e-mail) in addition to the agent webhook
 - Move from SQLite to PostgreSQL (`postgres` service in Compose)
 - Apply the Terraform module to a real AWS account with a remote state backend
