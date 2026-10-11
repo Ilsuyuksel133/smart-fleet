@@ -5,6 +5,7 @@ swap the real model (Ollama) for scripted answers (FakeProvider) in tests and
 CI, where no model is available.
 """
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -62,11 +63,21 @@ class OllamaProvider(LLMProvider):
 
     name = "ollama"
 
-    def __init__(self, base_url: str, model: str, timeout: float, think: bool = False):
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        timeout: float,
+        think: bool = False,
+        max_tokens: int = 1024,
+        attempts: int = 2,
+    ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
         self.think = think
+        self.max_tokens = max_tokens
+        self.attempts = attempts
 
     def chat(self, messages: list[Message], tools: list[ToolDefinition]) -> LLMResponse:
         payload = {
@@ -78,10 +89,12 @@ class OllamaProvider(LLMProvider):
             # "Thinking" models (e.g. qwen3) can reason before answering;
             # slower but sometimes more accurate. Configurable via OLLAMA_THINK.
             "think": self.think,
+            # Upper limit on generated tokens. A report needs a few hundred; the
+            # limit stops a model that starts repeating itself from running into
+            # the timeout (this happened once in the evaluation).
+            "options": {"num_predict": self.max_tokens},
         }
-        response = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout)
-        response.raise_for_status()
-        message = response.json().get("message", {})
+        message = self._post(payload)
 
         tool_calls = [
             ToolCall(
@@ -92,6 +105,20 @@ class OllamaProvider(LLMProvider):
             for call in message.get("tool_calls") or []
         ]
         return LLMResponse(content=message.get("content", ""), tool_calls=tool_calls)
+
+    def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """POST to Ollama; a timed-out call is tried once more before giving up."""
+        for attempt in range(1, self.attempts + 1):
+            try:
+                response = httpx.post(
+                    f"{self.base_url}/api/chat", json=payload, timeout=self.timeout
+                )
+                response.raise_for_status()
+                return response.json().get("message", {})
+            except httpx.TimeoutException:
+                if attempt == self.attempts:
+                    raise
+        raise AssertionError("unreachable")  # pragma: no cover
 
 
 class FakeProvider(LLMProvider):
@@ -114,6 +141,34 @@ class FakeProvider(LLMProvider):
         return LLMResponse(content="FakeProvider has no scripted responses left.")
 
 
+class DemoProvider(LLMProvider):
+    """A stand-in for a real model, used when LLM_PROVIDER=fake (e.g. in CI).
+
+    Unlike FakeProvider it is stateless, so it can serve any number of
+    investigations: it first asks for get_service_health, then answers with a
+    valid report that quotes the tool result. This exercises the whole path
+    (webhook, queue, loop, tool call, report, storage) without a model.
+    """
+
+    name = "fake"
+
+    def chat(self, messages: list[Message], tools: list[ToolDefinition]) -> LLMResponse:
+        tool_results = [m["content"] for m in messages if m["role"] == "tool"]
+        if not tool_results:
+            return LLMResponse(tool_calls=[ToolCall(name="get_service_health", arguments={})])
+        report = {
+            "summary": "Demo report from the fake LLM provider (no real analysis).",
+            "root_cause_category": "unknown",
+            "root_cause_explanation": "LLM_PROVIDER=fake: the report is scripted, not reasoned.",
+            "evidence": [
+                {"tool": "get_service_health", "query": "{}", "finding": tool_results[-1][:300]}
+            ],
+            "confidence": "low",
+            "suggested_actions": ["Set LLM_PROVIDER=ollama to get a real investigation."],
+        }
+        return LLMResponse(content=json.dumps(report))
+
+
 def get_provider(settings: Settings) -> LLMProvider:
     """Create the provider selected by the LLM_PROVIDER setting."""
     if settings.llm_provider == "ollama":
@@ -122,5 +177,6 @@ def get_provider(settings: Settings) -> LLMProvider:
             model=settings.ollama_model,
             timeout=settings.ollama_timeout_seconds,
             think=settings.ollama_think,
+            max_tokens=settings.ollama_max_tokens,
         )
-    return FakeProvider()
+    return DemoProvider()

@@ -3,7 +3,14 @@ import pytest
 import respx
 
 from agent.config import Settings
-from agent.llm import FakeProvider, LLMResponse, OllamaProvider, ToolCall, get_provider
+from agent.llm import (
+    DemoProvider,
+    FakeProvider,
+    LLMResponse,
+    OllamaProvider,
+    ToolCall,
+    get_provider,
+)
 
 OLLAMA = "http://ollama.test:11434"
 
@@ -30,7 +37,7 @@ def test_settings_reject_unknown_provider(monkeypatch):
 
 
 def test_get_provider_returns_selected_provider():
-    assert isinstance(get_provider(Settings(llm_provider="fake")), FakeProvider)
+    assert isinstance(get_provider(Settings(llm_provider="fake")), DemoProvider)
     ollama = get_provider(Settings(llm_provider="ollama", ollama_model="m:1b"))
     assert isinstance(ollama, OllamaProvider)
     assert ollama.model == "m:1b"
@@ -126,3 +133,54 @@ def test_ollama_provider_passes_think_flag_and_reads_call_id():
     assert response.tool_calls[0].id == "call_9"
     body = httpx.Response(200, content=route.calls.last.request.content).json()
     assert body["think"] is True
+
+
+@respx.mock
+def test_ollama_provider_limits_generated_tokens():
+    route = respx.post(f"{OLLAMA}/api/chat").mock(
+        return_value=httpx.Response(200, json={"message": {"content": "ok"}})
+    )
+    OllamaProvider(OLLAMA, "m:1b", 5, max_tokens=256).chat([], tools=[])
+    body = httpx.Response(200, content=route.calls.last.request.content).json()
+    assert body["options"] == {"num_predict": 256}
+
+
+@respx.mock
+def test_ollama_provider_retries_a_timeout_once():
+    route = respx.post(f"{OLLAMA}/api/chat").mock(
+        side_effect=[
+            httpx.ReadTimeout("slow"),
+            httpx.Response(200, json={"message": {"content": "second try"}}),
+        ]
+    )
+    response = OllamaProvider(OLLAMA, "m:1b", 5).chat([], tools=[])
+    assert response.content == "second try"
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_ollama_provider_gives_up_after_two_timeouts():
+    route = respx.post(f"{OLLAMA}/api/chat").mock(side_effect=httpx.ReadTimeout("slow"))
+    with pytest.raises(httpx.TimeoutException):
+        OllamaProvider(OLLAMA, "m:1b", 5).chat([], tools=[])
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_ollama_provider_does_not_retry_http_errors():
+    route = respx.post(f"{OLLAMA}/api/chat").mock(return_value=httpx.Response(404))
+    with pytest.raises(httpx.HTTPStatusError):
+        OllamaProvider(OLLAMA, "m:1b", 5).chat([], tools=[])
+    assert route.call_count == 1
+
+
+def test_demo_provider_calls_a_tool_then_reports():
+    demo = DemoProvider()
+    first = demo.chat([{"role": "user", "content": "alert"}], tools=[])
+    assert [call.name for call in first.tool_calls] == ["get_service_health"]
+
+    history = [{"role": "user", "content": "alert"}, {"role": "tool", "content": "API ok"}]
+    second = demo.chat(history, tools=[])
+    assert second.tool_calls == []
+    assert '"root_cause_category": "unknown"' in second.content
+    assert "API ok" in second.content
