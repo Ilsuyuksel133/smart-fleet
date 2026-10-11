@@ -55,7 +55,13 @@ class LLMProvider(ABC):
     name: str
 
     @abstractmethod
-    def chat(self, messages: list[Message], tools: list[ToolDefinition]) -> LLMResponse: ...
+    def chat(
+        self,
+        messages: list[Message],
+        tools: list[ToolDefinition],
+        response_schema: dict[str, Any] | None = None,
+    ) -> LLMResponse:
+        """One model turn. With `response_schema`, the answer must be JSON matching it."""
 
 
 class OllamaProvider(LLMProvider):
@@ -79,8 +85,13 @@ class OllamaProvider(LLMProvider):
         self.max_tokens = max_tokens
         self.attempts = attempts
 
-    def chat(self, messages: list[Message], tools: list[ToolDefinition]) -> LLMResponse:
-        payload = {
+    def chat(
+        self,
+        messages: list[Message],
+        tools: list[ToolDefinition],
+        response_schema: dict[str, Any] | None = None,
+    ) -> LLMResponse:
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "tools": tools,
@@ -94,6 +105,10 @@ class OllamaProvider(LLMProvider):
             # the timeout (this happened once in the evaluation).
             "options": {"num_predict": self.max_tokens},
         }
+        if response_schema:
+            # Structured output: Ollama constrains generation to this JSON schema,
+            # so the answer is always valid JSON with the right fields and enums.
+            payload["format"] = response_schema
         message = self._post(payload)
 
         tool_calls = [
@@ -133,9 +148,16 @@ class FakeProvider(LLMProvider):
     def __init__(self, responses: list[LLMResponse] | None = None):
         self.responses = list(responses or [])
         self.calls: list[list[Message]] = []
+        self.requests: list[dict[str, Any]] = []  # tools and schema of each call
 
-    def chat(self, messages: list[Message], tools: list[ToolDefinition]) -> LLMResponse:
+    def chat(
+        self,
+        messages: list[Message],
+        tools: list[ToolDefinition],
+        response_schema: dict[str, Any] | None = None,
+    ) -> LLMResponse:
         self.calls.append(list(messages))
+        self.requests.append({"tools": tools, "response_schema": response_schema})
         if self.responses:
             return self.responses.pop(0)
         return LLMResponse(content="FakeProvider has no scripted responses left.")
@@ -152,7 +174,12 @@ class DemoProvider(LLMProvider):
 
     name = "fake"
 
-    def chat(self, messages: list[Message], tools: list[ToolDefinition]) -> LLMResponse:
+    def chat(
+        self,
+        messages: list[Message],
+        tools: list[ToolDefinition],
+        response_schema: dict[str, Any] | None = None,
+    ) -> LLMResponse:
         tool_results = [m["content"] for m in messages if m["role"] == "tool"]
         if not tool_results:
             return LLMResponse(tool_calls=[ToolCall(name="get_service_health", arguments={})])

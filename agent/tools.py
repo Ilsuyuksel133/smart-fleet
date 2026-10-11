@@ -229,7 +229,7 @@ def build_tools(settings: Settings) -> dict[str, Tool]:
             description=(
                 "Run a PromQL query over the last N minutes and get min/max/last values per "
                 "series. Available metrics (and their only labels): "
-                "up (labels: job, instance), "
+                "up (labels: job = fleet-api or fleet-agent, instance), "
                 "fleet_vehicle_temperature_celsius (gauge: the current temperature, query it "
                 "directly without rate; labels: vehicle_id), "
                 "fleet_sensor_readings_total (labels: vehicle_id), "

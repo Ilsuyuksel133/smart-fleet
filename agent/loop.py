@@ -23,7 +23,14 @@ from typing import Any
 from agent import metrics
 from agent.config import Settings
 from agent.llm import LLMProvider, Message, ToolCall, get_provider
-from agent.report import Alert, Evidence, RCAReport, RootCauseCategory, parse_model_report
+from agent.report import (
+    Alert,
+    Evidence,
+    ModelReport,
+    RCAReport,
+    RootCauseCategory,
+    parse_model_report,
+)
 from agent.tools import Tool, build_tools, run_tool
 
 log = logging.getLogger("fleet-agent")
@@ -54,6 +61,9 @@ When you are done, answer with ONLY a JSON object, no other text:
 }
 Only cite evidence you actually got from a tool. If the evidence is weak or contradictory, \
 use "unknown" and "low" confidence."""
+
+# JSON schema of the report, used to force a valid answer on the retry
+REPORT_SCHEMA = ModelReport.model_json_schema()
 
 FIX_JSON_PROMPT = (
     "Your answer could not be used: {error}. "
@@ -111,7 +121,12 @@ class Investigator:
 
             try:
                 llm_started = self.clock()
-                response = self.provider.chat(messages, tool_definitions)
+                if json_retry_used:
+                    # The model already tried to answer: no more tools, and the
+                    # answer is constrained to the report's JSON schema.
+                    response = self.provider.chat(messages, [], response_schema=REPORT_SCHEMA)
+                else:
+                    response = self.provider.chat(messages, tool_definitions)
             except Exception as error:
                 # Model not running, crashed, timed out... never crash the investigation
                 log.error("llm call failed", extra={"step": step, "error": str(error)})
@@ -154,7 +169,10 @@ class Investigator:
                 # Small models often get the format almost right; one precise
                 # correction request fixes most of these cases.
                 json_retry_used = True
-                log.warning("invalid report, asking for a fix", extra={"step": step})
+                log.warning(
+                    "invalid report, asking for a fix",
+                    extra={"step": step, "error": short(error), "answer": short(response.content)},
+                )
                 messages.append(
                     {"role": "user", "content": FIX_JSON_PROMPT.format(error=short(error))}
                 )
