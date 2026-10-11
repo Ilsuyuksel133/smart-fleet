@@ -28,15 +28,19 @@ See [results.md](results.md) (generated) and [results.json](results.json) (raw) 
 
 All runs: `qwen3:8b`, think off, Apple M2 / 16 GB, 3 runs per scenario.
 
-| Scenario | Run A | Run B (latest) |
-|---|---|---|
-| api_down | 2/3 | 2/3 |
-| overheating | 3/3 | 2/3 |
-| alert_storm | 3/3 | 3/3 |
-| control | 3/3 | 2/3 |
-| **Total** | **11/12 (92%)** | **9/12 (75%)** |
+| Scenario | Run A | Run B | Run C (latest) |
+|---|---|---|---|
+| api_down | 2/3 | 2/3 | 3/3 |
+| overheating | 3/3 | 2/3 | 0/3 |
+| alert_storm | 3/3 | 3/3 | 3/3 |
+| control | 3/3 | 2/3 | 3/3 |
+| **Total** | **11/12 (92%)** | **9/12 (75%)** | **9/12 (75%)** |
 
-Run B ran on the code of phase 5, which caps generated tokens and retries a timed-out LLM call once. None of its failures was a timeout. The drop from 92% to 75% is within what two small samples of a non-deterministic model can show; it should not be read as a regression or an improvement. **Over both runs: 20/24 (83%).**
+Code changes between the runs:
+- **Run B:** the generated tokens are capped and a timed-out LLM call is retried once.
+- **Run C:** the report retry uses structured output, rejected reports are logged, and the tool description lists the `job` values.
+
+Differences of two or three answers between runs of 12 are within what small samples of a non-deterministic model show, so no single run should be read as a regression or an improvement. **Over all runs: 29/36 (81%).**
 
 ### Failures and what they show
 
@@ -46,11 +50,11 @@ Run B ran on the code of phase 5, which caps generated tokens and retries a time
 | B | api_down | unknown / low (`invalid_output`) | The right evidence was collected (API down, `up` = 0), but the final answer was invalid JSON twice. |
 | B | overheating | unknown / medium | Over-cautious: it saw 97.9 °C for the alerted vehicle but considered the evidence inconclusive. |
 | B | control | service_down / medium | It queried `up{job="api"}` (the job is called `fleet-api`), got no data and concluded the API was not scraped, contradicting its own health check. |
+| C | overheating (all 3) | unknown / medium | Every time it queried `fleet_alerts_total{type="high_temperature", vehicle_id="1"}`. That metric has no `vehicle_id` label, so the query returned no data. The model read this as "no high-temperature alerts" and called the evidence contradictory, although it had seen the temperature at 95–100 °C. |
 
-The loop's guard rails held in every run: no crash, no endless loop, and every report contains the evidence that was collected. The failures are reasoning and formatting errors of a small local model. Possible next steps:
-- Validate the final JSON with Ollama's structured output (JSON schema) on the retry.
-- Log why a report was rejected.
-- List the values of `job` in the Prometheus tool description.
+The loop's guard rails held in every run: no crash, no endless loop, and every report contains the evidence that was collected. In run C no answer had to be retried for invalid JSON. The remaining failures are reasoning errors of a small local model.
+
+The most frequent pattern (4 of 7 failures) is the same: **a query with a label that does not exist returns "no data", and the model takes that as evidence.** A possible next step is a "no data" message that reminds the model to check the label names.
 
 ### Caveats
 
