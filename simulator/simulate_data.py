@@ -35,14 +35,22 @@ def wait_for_api(retries=30, delay=2):
     raise SystemExit(f"API not reachable: {API_URL}")
 
 
+SIMULATED_VEHICLES = ["Truck-1", "Truck-2", "Van-1"]
+
+
 def get_vehicle_ids():
-    """Return existing vehicle IDs, creating a few vehicles if there are none."""
-    vehicles = requests.get(f"{API_URL}/vehicles", timeout=5).json()
-    if not vehicles:
-        for name in ["Truck-1", "Truck-2", "Van-1"]:
+    """Return all vehicle IDs, first creating any of our own vehicles that are missing.
+
+    Checking by name (instead of "only if there are no vehicles at all") avoids a
+    race: if another client, e.g. the smoke test, creates a vehicle first, the
+    simulator still gets its full fleet.
+    """
+    existing = {v["name"] for v in requests.get(f"{API_URL}/vehicles", timeout=5).json()}
+    for name in SIMULATED_VEHICLES:
+        if name not in existing:
             requests.post(f"{API_URL}/vehicles", json={"name": name}, timeout=5).raise_for_status()
             log.info("vehicle created", extra={"vehicle_name": name})
-        vehicles = requests.get(f"{API_URL}/vehicles", timeout=5).json()
+    vehicles = requests.get(f"{API_URL}/vehicles", timeout=5).json()
     return [v["id"] for v in vehicles]
 
 

@@ -303,3 +303,13 @@ def test_create_investigator_uses_settings():
     assert isinstance(agent.provider, OllamaProvider)
     assert agent.max_steps == 5
     assert "query_loki" in agent.tools
+
+
+def test_demo_provider_completes_a_full_investigation(tools):
+    from agent.llm import DemoProvider
+
+    report = investigator(DemoProvider(), tools).investigate(ALERT)
+    assert report.stop_reason == "completed"
+    assert report.steps_used == 2
+    assert report.root_cause_category == RootCauseCategory.unknown
+    assert report.evidence[0].finding.startswith("API /health: ERROR")

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen3:8b"
     ollama_timeout_seconds: float = 120.0
     ollama_think: bool = False
+    ollama_max_tokens: int = 1024
 
     # Guard rails of the agent loop
     agent_max_steps: int = 8

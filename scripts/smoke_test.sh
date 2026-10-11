@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end test of the running stack: health -> vehicle -> data -> alert -> metrics -> log (Loki)
+# -> agent (webhook alert -> RCA report)
 # Usage: scripts/smoke_test.sh [API_URL] [LOKI_URL] [AGENT_URL]
 #   defaults: http://localhost:8000, http://localhost:3100, http://localhost:8100
 set -euo pipefail
@@ -9,6 +10,8 @@ LOKI_URL="${2:-${LOKI_URL:-http://localhost:3100}}"
 AGENT_URL="${3:-${AGENT_URL:-http://localhost:8100}}"
 RETRIES="${RETRIES:-30}"
 LOKI_RETRIES="${LOKI_RETRIES:-45}"
+# With a real local model an investigation takes about a minute
+REPORT_RETRIES="${REPORT_RETRIES:-120}"
 
 log()  { echo "[smoke] $*"; }
 fail() { echo "[smoke] FAIL: $*" >&2; exit 1; }
@@ -79,6 +82,31 @@ for i in $(seq 1 "$RETRIES"); do
   fi
   [ "$i" -eq "$RETRIES" ] && fail "Agent did not become healthy after $RETRIES attempts"
   log "Waiting for agent... ($i/$RETRIES)"
+  sleep 2
+done
+
+# 8) Does a webhook alert turn into a stored RCA report? (fake or real LLM)
+# Unique name per run, so the agent's per-alert cooldown never skips it
+alert_name="SmokeTest$(date +%s)"
+webhook_payload='{"status": "firing", "alerts": [{"status": "firing",
+  "labels": {"alertname": "'"$alert_name"'", "severity": "info"},
+  "annotations": {"summary": "Synthetic alert from the smoke test"}}]}'
+accepted=$(curl -fsS -X POST "$AGENT_URL/webhook/alertmanager" \
+  -H "Content-Type: application/json" -d "$webhook_payload")
+investigation_id=$(grep -oE '"investigation_id":[0-9]+' <<< "$accepted" | cut -d: -f2)
+[ -n "$investigation_id" ] || fail "Agent did not accept the webhook alert: $accepted"
+log "Agent accepted $alert_name as investigation $investigation_id"
+
+for i in $(seq 1 "$REPORT_RETRIES"); do
+  report=$(curl -fsS "$AGENT_URL/reports/$investigation_id")
+  if grep -q '"status":"done"' <<< "$report"; then
+    grep -q '"root_cause_category":' <<< "$report" || fail "Report has no root cause: $report"
+    log "RCA report stored for investigation $investigation_id"
+    break
+  fi
+  grep -q '"status":"failed"' <<< "$report" && fail "Investigation failed: $report"
+  [ "$i" -eq "$REPORT_RETRIES" ] && fail "No report after $REPORT_RETRIES attempts"
+  log "Waiting for the agent's report... ($i/$REPORT_RETRIES)"
   sleep 2
 done
 
