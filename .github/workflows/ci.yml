@@ -33,6 +33,7 @@ jobs:
             requirements-dev.txt
             api/requirements.txt
             agent/requirements.txt
+            simulator/requirements.txt
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
@@ -43,7 +44,7 @@ jobs:
           ruff format --check .
 
       - name: Test
-        run: pytest --cov=api --cov=agent --cov-report=xml --cov-report=term
+        run: pytest --cov=api --cov=agent --cov=eval --cov-report=xml --cov-report=term
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v7

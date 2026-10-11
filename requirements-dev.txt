@@ -1,7 +1,9 @@
 -r api/requirements.txt
 -r agent/requirements.txt
+-r simulator/requirements.txt
 pytest==9.1.1
 pytest-cov==7.1.0
 httpx2==2.13.1
 ruff==0.17.0
 respx==0.23.1
+pyyaml==6.0.3

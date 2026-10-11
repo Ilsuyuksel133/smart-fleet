@@ -1,0 +1,7 @@
+name: overheating
+description: One vehicle keeps reporting 95-100 °C, so VehicleOverheating fires.
+alert: VehicleOverheating
+expected_category: sensor_anomaly
+simulator_mode: overheat
+wait_for_alert: VehicleOverheating
+timeout_seconds: 180

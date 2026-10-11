@@ -1,0 +1,8 @@
+name: api_down
+description: The API container is stopped, so FleetApiDown fires.
+alert: FleetApiDown
+expected_category: service_down
+simulator_mode: calm
+stop_services: [api]
+wait_for_alert: FleetApiDown
+timeout_seconds: 180

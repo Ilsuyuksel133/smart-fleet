@@ -51,6 +51,8 @@ services:
     environment:
       API_URL: http://api:8000
       INTERVAL_SECONDS: 3
+      # random (default) | calm | overheat | storm — the fault modes are used by eval/
+      SIMULATOR_MODE: ${SIMULATOR_MODE:-random}
     depends_on:
       api:
         condition: service_healthy
