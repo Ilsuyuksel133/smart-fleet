@@ -184,3 +184,19 @@ def test_demo_provider_calls_a_tool_then_reports():
     assert second.tool_calls == []
     assert '"root_cause_category": "unknown"' in second.content
     assert "API ok" in second.content
+
+
+@respx.mock
+def test_ollama_provider_sends_schema_only_when_given():
+    route = respx.post(f"{OLLAMA}/api/chat").mock(
+        return_value=httpx.Response(200, json={"message": {"content": "{}"}})
+    )
+    provider = OllamaProvider(OLLAMA, "m:1b", 5)
+
+    provider.chat([], tools=[])
+    assert "format" not in httpx.Response(200, content=route.calls.last.request.content).json()
+
+    schema = {"type": "object", "properties": {"summary": {"type": "string"}}}
+    provider.chat([], tools=[], response_schema=schema)
+    body = httpx.Response(200, content=route.calls.last.request.content).json()
+    assert body["format"] == schema

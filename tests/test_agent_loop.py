@@ -158,6 +158,20 @@ def test_invalid_json_is_retried_once(tools):
     fix_request = fake.calls[2][-1]
     assert fix_request["role"] == "user"
     assert "could not be used" in fix_request["content"]
+    # The retry offers no tools and constrains the answer to the report schema
+    assert fake.requests[1]["response_schema"] is None
+    assert fake.requests[2]["tools"] == []
+    schema = fake.requests[2]["response_schema"]
+    assert "root_cause_category" in schema["properties"]
+
+
+def test_rejected_report_is_logged_with_the_reason(tools, caplog):
+    caplog.set_level(logging.WARNING, logger="fleet-agent")
+    fake = FakeProvider([call("get_service_health"), LLMResponse(content="not json"), final()])
+    investigator(fake, tools).investigate(ALERT)
+    warning = [r for r in caplog.records if r.getMessage() == "invalid report, asking for a fix"][0]
+    assert warning.error == "no JSON object found in the answer"
+    assert warning.answer == "not json"
 
 
 def test_invalid_category_is_retried(tools):
