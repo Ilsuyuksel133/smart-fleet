@@ -405,7 +405,7 @@ Other targets: `make up`, `make down`, `make logs`, `make smoke`, `make clean`.
 
 ```
 api/              FastAPI service (main.py, database.py, models.py, metrics.py, logging_config.py) + Dockerfile
-dashboard/        Streamlit dashboard (+ pages/1_Incidents.py) + Dockerfile
+dashboard/        Streamlit dashboard: app.py (navigation), fleet.py, incidents.py + Dockerfile
 simulator/        Sensor data simulator + Dockerfile
 agent/            AI incident agent: config, LLM providers, tools, loop, report, queue, storage, MCP server + Dockerfile
 eval/             Fault-injection evaluation of the agent: scenarios, harness, results
