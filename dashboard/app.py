@@ -1,31 +1,12 @@
-import os
+"""Entry point of the dashboard: defines the pages and their names in the sidebar."""
 
-import requests
 import streamlit as st
 
-API_URL = os.getenv("API_URL", "http://localhost:8000")
+# Wide layout: the incident tables (evidence, findings) need the horizontal space
+st.set_page_config(page_title="Smart Fleet", page_icon="🚚", layout="wide")
 
-st.title("Smart Fleet Monitor")
-
-try:
-    vehicles = requests.get(f"{API_URL}/vehicles", timeout=5).json()
-    alerts = requests.get(f"{API_URL}/alerts", timeout=5).json()
-except requests.RequestException as e:
-    st.error(f"Cannot reach the API ({API_URL}): {e}")
-    st.stop()
-
-# Vehicle list
-st.header("Vehicles")
-if vehicles:
-    for v in vehicles:
-        st.metric(label=v["name"], value=v["status"])
-else:
-    st.info("No vehicles yet.")
-
-# Alerts
-st.header("Alerts")
-if alerts:
-    for a in alerts:
-        st.error(f"Vehicle {a['vehicle_id']} — {a['reason']} ({a['timestamp']})")
-else:
-    st.success("No active alerts.")
+pages = [
+    st.Page("fleet.py", title="Fleet", icon="🚚", default=True),
+    st.Page("incidents.py", title="Incidents", icon="🚨", url_path="Incidents"),
+]
+st.navigation(pages).run()

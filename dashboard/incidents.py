@@ -106,7 +106,8 @@ else:
 
     st.markdown("**Evidence**")
     if report["evidence"]:
-        st.dataframe(report["evidence"], hide_index=True, use_container_width=True)
+        # st.table wraps long text, so the findings stay readable
+        st.table(report["evidence"])
     else:
         st.write("No evidence was collected.")
 
