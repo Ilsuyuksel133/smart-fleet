@@ -260,7 +260,7 @@ flowchart LR
 |---|---|
 | **lint-and-test** | `ruff check`, `ruff format --check`, `pytest` with coverage of `api`, `agent` and `eval` (report uploaded as an artifact) |
 | **docker-build** | Builds the four images in parallel (matrix) with GitHub Actions layer cache. On `main` pushes them to GHCR as `ghcr.io/ilsuyuksel133/smart-fleet-<service>` with `sha-<short-sha>` and `latest` tags; pull requests only build |
-| **smoke-test** | Starts the full stack with Docker Compose, runs [`scripts/smoke_test.sh`](scripts/smoke_test.sh) (health → alert → metrics → log in Loki → agent: webhook alert → stored RCA report, with `LLM_PROVIDER=fake`), prints logs on failure, always tears down |
+| **smoke-test** | Starts the full stack with Docker Compose, runs [`scripts/smoke_test.sh`](scripts/smoke_test.sh) (health → alert → metrics → log in Loki → agent: webhook alert → stored RCA report, with `LLM_PROVIDER=fake`), then runs the Playwright UI tests in [`ui_tests/`](ui_tests/) against the dashboard (screenshots uploaded as an artifact on failure), prints logs on failure, always tears down |
 | **ansible-deploy-test** | Lints the playbook, builds this commit's images, runs the playbook against the runner (`localhost`), runs the smoke test, then runs the playbook again and fails unless it reports `changed=0` |
 | **terraform** | `fmt -check`, `validate`, `tflint`, then `plan` → `apply` → output checks → `plan` (must be empty) → `destroy` against a local AWS emulator (Moto) |
 
@@ -405,6 +405,19 @@ make test      # pytest with coverage of api, agent and eval
 
 Other targets: `make up`, `make down`, `make logs`, `make smoke`, `make clean`.
 
+### UI tests
+
+Browser tests for the Streamlit dashboard, written with [Playwright](https://playwright.dev/python/). They run against the running stack, so start it first:
+
+```bash
+pip install -r ui_tests/requirements.txt
+playwright install chromium
+make up && make smoke      # the smoke test also creates an agent report for the tests
+pytest ui_tests --base-url http://localhost:8501
+```
+
+With `LLM_PROVIDER=fake` in `.env` the report is ready in seconds. Add `--headed --slowmo 500` to watch the browser. The tests check that the Fleet page loads, that the sidebar opens the Incidents page, that the latest report shows its root cause, suggested actions and evidence, and that a manual investigation can be started. The report table itself is not checked: Streamlit draws it on a canvas, so its text is not in the page's HTML.
+
 ## Project structure
 
 ```
@@ -414,6 +427,7 @@ simulator/        Sensor data simulator + Dockerfile
 agent/            AI incident agent: config, LLM providers, tools, loop, report, queue, storage, MCP server + Dockerfile
 eval/             Fault-injection evaluation of the agent: scenarios, harness, results
 tests/            pytest suite (isolated SQLite DB per test, mocked HTTP, scripted LLM)
+ui_tests/         Playwright UI tests for the dashboard (run against the running stack)
 monitoring/       Prometheus rules, Alertmanager, Loki and Alloy config, Grafana provisioning and dashboard
 scripts/          smoke_test.sh
 deploy/ansible/   Ansible playbook and smart_fleet role
