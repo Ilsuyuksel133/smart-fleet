@@ -113,6 +113,25 @@ jobs:
       - name: Run smoke test
         run: ./scripts/smoke_test.sh http://localhost:8000
 
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install UI test dependencies
+        run: |
+          pip install -r ui_tests/requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run UI tests
+        run: pytest ui_tests --base-url http://localhost:8501 --screenshot only-on-failure --output test-results
+
+      - name: Upload UI test screenshots
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-test-screenshots
+          path: test-results/
+
       - name: Show logs on failure
         if: failure()
         run: docker compose logs
