@@ -2,12 +2,15 @@
 
 [![CI](https://github.com/Ilsuyuksel133/smart-fleet/actions/workflows/ci.yml/badge.svg)](https://github.com/Ilsuyuksel133/smart-fleet/actions/workflows/ci.yml)
 
-A small fleet-monitoring system — a FastAPI service that ingests vehicle sensor data and raises rule-based alerts, a Streamlit dashboard and a data simulator — packaged as a DevOps project: every service is containerized, the whole stack starts with one command, a GitHub Actions pipeline lints, tests, builds, deploys and smoke-tests it on every change, Prometheus, Loki and Grafana provide metrics, logs, dashboards and alerting, and the deployment is automated with Ansible and described as infrastructure as code with Terraform. An **AI incident agent** investigates firing alerts with a local LLM and read-only tools and writes a root cause report for a human to act on.
+A small fleet-monitoring system — a FastAPI service that ingests vehicle sensor data and raises rule-based alerts, a React + TypeScript web app, a Streamlit dashboard and a data simulator — packaged as a DevOps project: every service is containerized, the whole stack starts with one command, a GitHub Actions pipeline lints, tests, builds, deploys and smoke-tests it on every change, Prometheus, Loki and Grafana provide metrics, logs, dashboards and alerting, and the deployment is automated with Ansible and described as infrastructure as code with Terraform. An **AI incident agent** investigates firing alerts with a local LLM and read-only tools and writes a root cause report for a human to act on.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
+    browser([Browser]) --> web[web: nginx + React]
+    web -- "/api/*" --> api
+    web -- "/agent/*" --> agent
     sim[Simulator] -- "POST sensor data" --> api[FastAPI API]
     dash[Streamlit dashboard] -- "GET vehicles / alerts" --> api
     api --> db[(SQLite<br/>volume)]
@@ -26,6 +29,7 @@ flowchart LR
 
 | Service | Description | URL |
 |---|---|---|
+| `web` | React + TypeScript UI (nginx, proxies `/api` and `/agent`) | http://localhost:8080 |
 | `api` | FastAPI REST API, `/health` and `/metrics`, JSON logs | http://localhost:8000/docs |
 | `dashboard` | Streamlit UI: vehicles and alerts, plus an **Incidents** page with the agent's reports | http://localhost:8501 |
 | `simulator` | Sends random sensor readings every few seconds | – |
@@ -56,7 +60,7 @@ ollama pull qwen3:8b
 
 Without Ollama, set `LLM_PROVIDER=fake` in `.env`: the agent then writes scripted demo reports. With `ollama` but no Ollama running, the agent stays up and its reports end with `stop_reason: llm_error`.
 
-Verify the running stack end to end (API, alerts, metrics, log ingestion and an agent investigation):
+Verify the running stack end to end (API, alerts, metrics, log ingestion, an agent investigation and the web UI with its proxy):
 
 ```bash
 make smoke
@@ -251,7 +255,8 @@ The pipeline in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on p
 
 ```mermaid
 flowchart LR
-    lt[lint-and-test] --> db[docker-build<br/>api · dashboard · simulator · agent]
+    lt[lint-and-test] --> db[docker-build<br/>api · dashboard · simulator · agent · web]
+    wt[web-lint-and-test] --> db
     db --> st[smoke-test]
     lt --> an[ansible-deploy-test]
     tf[terraform]
@@ -260,8 +265,9 @@ flowchart LR
 | Job | What it does |
 |---|---|
 | **lint-and-test** | `ruff check`, `ruff format --check`, `pytest` with coverage of `api`, `agent` and `eval` (report uploaded as an artifact) |
-| **docker-build** | Builds the four images in parallel (matrix) with GitHub Actions layer cache. On `main` pushes them to GHCR as `ghcr.io/ilsuyuksel133/smart-fleet-<service>` with `sha-<short-sha>` and `latest` tags; pull requests only build |
-| **smoke-test** | Starts the full stack with Docker Compose, runs [`scripts/smoke_test.sh`](scripts/smoke_test.sh) (health → alert → metrics → log in Loki → agent: webhook alert → stored RCA report, with `LLM_PROVIDER=fake`), then runs the Playwright UI tests in [`ui_tests/`](ui_tests/) against the dashboard (screenshots uploaded as an artifact on failure), prints logs on failure, always tears down |
+| **web-lint-and-test** | ESLint, `tsc`, Vitest and the production build of `web/`, then the API contract check (OpenAPI schema and generated types must match the API code) |
+| **docker-build** | Builds the five images in parallel (matrix) with GitHub Actions layer cache. On `main` pushes them to GHCR as `ghcr.io/ilsuyuksel133/smart-fleet-<service>` with `sha-<short-sha>` and `latest` tags; pull requests only build |
+| **smoke-test** | Starts the full stack with Docker Compose, runs [`scripts/smoke_test.sh`](scripts/smoke_test.sh) (health → alert → metrics → log in Loki → agent: webhook alert → stored RCA report → web UI and its proxy, with `LLM_PROVIDER=fake`), then runs the Playwright UI tests in [`ui_tests/`](ui_tests/) against the web app and the dashboard (screenshots uploaded as an artifact on failure), prints logs on failure, always tears down |
 | **ansible-deploy-test** | Lints the playbook, builds this commit's images, runs the playbook against the runner (`localhost`), runs the smoke test, then runs the playbook again and fails unless it reports `changed=0` |
 | **terraform** | `fmt -check`, `validate`, `tflint`, then `plan` → `apply` → output checks → `plan` (must be empty) → `destroy` against a local AWS emulator (Moto) |
 
@@ -409,9 +415,9 @@ make test      # pytest with coverage of api, agent and eval
 
 Other targets: `make up`, `make down`, `make logs`, `make smoke`, `make clean`.
 
-### Web frontend
+### Frontend development
 
-A React + TypeScript single-page app in `web/` (Vite, TanStack Query, React Router, Recharts) with the Fleet, vehicle detail, Alerts and Incidents views. With the stack running:
+A React + TypeScript single-page app in `web/` (Vite, TanStack Query, React Router, Recharts) with the Fleet, vehicle detail, Alerts and Incidents views. In Docker it is served by nginx on port 8080. For development, run Vite against the running stack:
 
 ```bash
 cd web
@@ -423,30 +429,37 @@ npm run gen:types                             # after `make openapi`: regenerate
 
 The browser only talks to its own origin: Vite (and nginx in production) forwards `/api` to the API and `/agent` to the agent, so no CORS is needed and the services stay unchanged. For setups without a proxy, `CORS_ORIGINS` can allow specific origins on both services; it is off by default.
 
+In CI, `web-lint-and-test` runs lint, type check, tests and build, then a **contract check**: it exports the OpenAPI schema from the API code, regenerates the TypeScript types and fails if either differs from the committed files. A backend change that breaks the frontend's types cannot be merged unnoticed.
+
+![Web UI: fleet overview with statistics and the vehicle table](docs/images/web-fleet.png)
+![Web UI: temperature history of a vehicle with the 80 °C alert threshold](docs/images/web-vehicle.png)
+![Web UI: an incident report (fake LLM provider) with root cause, evidence, suggested actions and run facts](docs/images/web-incident.png)
+
 ### UI tests
 
-Browser tests for the Streamlit dashboard, written with [Playwright](https://playwright.dev/python/). They run against the running stack, so start it first:
+Browser tests for the React web app (`ui_tests/web`) and the Streamlit dashboard (`ui_tests/streamlit`), written with [Playwright](https://playwright.dev/python/). They run against the running stack, so start it first:
 
 ```bash
 pip install -r ui_tests/requirements.txt
 playwright install chromium
 make up && make smoke      # the smoke test also creates an agent report for the tests
-pytest ui_tests --base-url http://localhost:8501
+pytest ui_tests/web --base-url http://localhost:8080
+pytest ui_tests/streamlit --base-url http://localhost:8501
 ```
 
-With `LLM_PROVIDER=fake` in `.env` the report is ready in seconds. Add `--headed --slowmo 500` to watch the browser. The tests check that the Fleet page loads, that the sidebar opens the Incidents page, that the latest report shows its root cause, suggested actions and evidence, and that a manual investigation can be started. The report table itself is not checked: Streamlit draws it on a canvas, so its text is not in the page's HTML.
+With `LLM_PROVIDER=fake` in `.env` the report is ready in seconds. Add `--headed --slowmo 500` to watch the browser. The web tests check that the fleet table lists the vehicles, that a vehicle page shows its chart, that the alert filter is kept in the URL, that a finished report shows its root cause and evidence, and that a manual investigation can be started. The Streamlit tests cover the same report and investigation flow; its report table is not checked, because Streamlit draws it on a canvas, so its text is not in the page's HTML.
 
 ## Project structure
 
 ```
 api/              FastAPI service (main.py, database.py, models.py, metrics.py, logging_config.py) + Dockerfile
-web/              React + TypeScript frontend (Vite); API types generated from web/openapi/fleet-api.json
+web/              React + TypeScript frontend (Vite) + Dockerfile and nginx.conf; API types generated from web/openapi/fleet-api.json
 dashboard/        Streamlit dashboard: app.py (navigation), fleet.py, incidents.py + Dockerfile
 simulator/        Sensor data simulator + Dockerfile
 agent/            AI incident agent: config, LLM providers, tools, loop, report, queue, storage, MCP server + Dockerfile
 eval/             Fault-injection evaluation of the agent: scenarios, harness, results
 tests/            pytest suite (isolated SQLite DB per test, mocked HTTP, scripted LLM)
-ui_tests/         Playwright UI tests for the dashboard (run against the running stack)
+ui_tests/         Playwright UI tests: web/ (React app) and streamlit/ (dashboard), run against the running stack
 monitoring/       Prometheus rules, Alertmanager, Loki and Alloy config, Grafana provisioning and dashboard
 scripts/          smoke_test.sh, export_openapi.py
 deploy/ansible/   Ansible playbook and smart_fleet role
