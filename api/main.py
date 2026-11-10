@@ -1,12 +1,23 @@
 import logging
 import os
 import time
+from datetime import UTC, datetime, timedelta
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from pydantic import BaseModel
-from sqlalchemy import text
+from schemas import (
+    AlertOut,
+    AlertType,
+    DataSavedOut,
+    SensorData,
+    StatsOut,
+    VehicleCreate,
+    VehicleOut,
+    VehicleStatsOut,
+    VehicleStatusOut,
+)
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 import metrics
@@ -21,7 +32,7 @@ log = logging.getLogger("fleet-api")
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(title="Smart Fleet API", version="1.0.0")
 
 
 # --- Middleware for HTTP metrics and request logs ---
@@ -50,18 +61,8 @@ async def observability_middleware(request: Request, call_next):
     return response
 
 
-# --- Request schemas ---
-class VehicleCreate(BaseModel):
-    name: str
-
-
-class SensorData(BaseModel):
-    temperature: float
-    status: str
-
-
 # --- Endpoint 1: add a vehicle ---
-@app.post("/vehicles")
+@app.post("/vehicles", response_model=VehicleOut)
 def add_vehicle(data: VehicleCreate, db: Session = Depends(get_db)):
     vehicle = Vehicle(name=data.name)
     db.add(vehicle)
@@ -71,7 +72,7 @@ def add_vehicle(data: VehicleCreate, db: Session = Depends(get_db)):
 
 
 # --- Endpoint 2: send sensor data ---
-@app.post("/vehicles/{vehicle_id}/data")
+@app.post("/vehicles/{vehicle_id}/data", response_model=DataSavedOut)
 def send_data(vehicle_id: int, data: SensorData, db: Session = Depends(get_db)):
     vehicle = db.get(Vehicle, vehicle_id)
     if vehicle is None:
@@ -86,7 +87,11 @@ def send_data(vehicle_id: int, data: SensorData, db: Session = Depends(get_db)):
 
     # Alert logic
     if data.temperature > ALERT_TEMP_THRESHOLD:
-        alert = Alert(vehicle_id=vehicle_id, reason=f"High temperature: {data.temperature}°C")
+        alert = Alert(
+            vehicle_id=vehicle_id,
+            type="high_temperature",
+            reason=f"High temperature: {data.temperature}°C",
+        )
         db.add(alert)
         metrics.ALERTS.labels("high_temperature").inc()
         log.warning(
@@ -99,7 +104,11 @@ def send_data(vehicle_id: int, data: SensorData, db: Session = Depends(get_db)):
         )
 
     if data.status != "OK":
-        alert = Alert(vehicle_id=vehicle_id, reason=f"Abnormal status: {data.status}")
+        alert = Alert(
+            vehicle_id=vehicle_id,
+            type="abnormal_status",
+            reason=f"Abnormal status: {data.status}",
+        )
         db.add(alert)
         metrics.ALERTS.labels("abnormal_status").inc()
         log.warning(
@@ -117,21 +126,108 @@ def send_data(vehicle_id: int, data: SensorData, db: Session = Depends(get_db)):
 
 
 # --- Endpoint 3: list all vehicles ---
-@app.get("/vehicles")
+@app.get("/vehicles", response_model=list[VehicleOut])
 def list_vehicles(db: Session = Depends(get_db)):
-    return db.query(Vehicle).all()
+    return db.scalars(select(Vehicle).order_by(Vehicle.id)).all()
 
 
 # --- Endpoint 4: vehicle status ---
-@app.get("/vehicles/{vehicle_id}/status")
-def get_status(vehicle_id: int, db: Session = Depends(get_db)):
-    logs = db.query(SensorLog).filter(SensorLog.vehicle_id == vehicle_id).all()
-    return {"vehicle_id": vehicle_id, "logs": logs}
+@app.get("/vehicles/{vehicle_id}/status", response_model=VehicleStatusOut)
+def get_status(
+    vehicle_id: int,
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    if db.get(Vehicle, vehicle_id) is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    # Take the newest N readings, then return them oldest first (ready for a chart)
+    newest = db.scalars(
+        select(SensorLog)
+        .where(SensorLog.vehicle_id == vehicle_id)
+        .order_by(SensorLog.timestamp.desc(), SensorLog.id.desc())
+        .limit(limit)
+    ).all()
+    return {"vehicle_id": vehicle_id, "logs": list(reversed(newest))}
 
 
-@app.get("/alerts")
-def get_alerts(db: Session = Depends(get_db)):
-    return db.query(Alert).all()
+# --- Endpoint 5: alerts ---
+@app.get("/alerts", response_model=list[AlertOut])
+def get_alerts(
+    limit: int = Query(100, ge=1, le=1000),
+    vehicle_id: int | None = None,
+    # "type" is a Python builtin, so the parameter gets another name and an alias
+    alert_type: AlertType | None = Query(None, alias="type"),
+    db: Session = Depends(get_db),
+):
+    query = select(Alert)
+    if vehicle_id is not None:
+        query = query.where(Alert.vehicle_id == vehicle_id)
+    if alert_type is not None:
+        query = query.where(Alert.type == alert_type)
+    # Newest first; timestamps have second precision, so the id breaks ties
+    query = query.order_by(Alert.timestamp.desc(), Alert.id.desc()).limit(limit)
+    return db.scalars(query).all()
+
+
+# --- Endpoint 6: aggregated statistics ---
+@app.get("/stats", response_model=StatsOut)
+def get_stats(minutes: int = Query(15, ge=1, le=1440), db: Session = Depends(get_db)):
+    # Timestamps are stored in UTC (the database's CURRENT_TIMESTAMP)
+    since = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=minutes)
+
+    # SELECT COUNT(*) FROM vehicles;
+    vehicles_total = db.scalar(select(func.count()).select_from(Vehicle))
+    # SELECT COUNT(*) FROM vehicles WHERE status != 'OK';
+    vehicles_not_ok = db.scalar(
+        select(func.count()).select_from(Vehicle).where(Vehicle.status != "OK")
+    )
+
+    # SELECT type, COUNT(*) FROM alerts
+    # WHERE timestamp >= :since
+    # GROUP BY type;
+    alert_rows = db.execute(
+        select(Alert.type, func.count()).where(Alert.timestamp >= since).group_by(Alert.type)
+    ).all()
+    # Every type is present, with 0 if there were no alerts of that type
+    alerts_by_type = {"high_temperature": 0, "abnormal_status": 0}
+    alerts_by_type.update({alert_type: count for alert_type, count in alert_rows if alert_type})
+
+    # SELECT v.id, v.name, COUNT(*), AVG(s.temperature), MAX(s.temperature)
+    # FROM sensor_logs s JOIN vehicles v ON v.id = s.vehicle_id
+    # WHERE s.timestamp >= :since
+    # GROUP BY v.id, v.name
+    # ORDER BY v.id;
+    vehicle_rows = db.execute(
+        select(
+            Vehicle.id,
+            Vehicle.name,
+            func.count(SensorLog.id),
+            func.avg(SensorLog.temperature),
+            func.max(SensorLog.temperature),
+        )
+        .join(SensorLog, SensorLog.vehicle_id == Vehicle.id)
+        .where(SensorLog.timestamp >= since)
+        .group_by(Vehicle.id, Vehicle.name)
+        .order_by(Vehicle.id)
+    ).all()
+    per_vehicle = [
+        VehicleStatsOut(
+            vehicle_id=vehicle_id,
+            name=name,
+            readings=readings,
+            avg_temperature=round(avg, 2),
+            max_temperature=maximum,
+        )
+        for vehicle_id, name, readings, avg, maximum in vehicle_rows
+    ]
+
+    return StatsOut(
+        window_minutes=minutes,
+        vehicles_total=vehicles_total,
+        vehicles_not_ok=vehicles_not_ok,
+        alerts_by_type=alerts_by_type,
+        per_vehicle=per_vehicle,
+    )
 
 
 # --- Observability ---

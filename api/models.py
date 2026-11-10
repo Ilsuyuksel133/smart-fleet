@@ -27,5 +27,8 @@ class Alert(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     vehicle_id = Column(Integer)
+    # "high_temperature" or "abnormal_status": filterable and groupable in SQL,
+    # instead of parsing the human-readable reason text
+    type = Column(String(32))
     reason = Column(String)
     timestamp = Column(DateTime, default=func.now())

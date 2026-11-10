@@ -18,16 +18,24 @@ from main import app  # noqa: E402
 
 
 @pytest.fixture
-def client(tmp_path):
-    """A separate, temporary SQLite database for each test."""
+def session_factory(tmp_path):
+    """A separate, temporary SQLite database for each test.
+
+    Tests can also open sessions on it directly, e.g. to insert rows with
+    timestamps in the past.
+    """
     engine = create_engine(
         f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False}
     )
     Base.metadata.create_all(bind=engine)
-    TestingSession = sessionmaker(bind=engine)
+    yield sessionmaker(bind=engine)
+    engine.dispose()
 
+
+@pytest.fixture
+def client(session_factory):
     def override_get_db():
-        db = TestingSession()
+        db = session_factory()
         try:
             yield db
         finally:
@@ -37,7 +45,6 @@ def client(tmp_path):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
-    engine.dispose()
 
 
 @pytest.fixture
