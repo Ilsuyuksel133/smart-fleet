@@ -81,6 +81,7 @@ All configuration comes from environment variables (see `.env.example`).
 | `LLM_PROVIDER` | agent | `ollama` | `ollama` (local model) or `fake` (scripted, used in CI) |
 | `OLLAMA_URL` | agent | `http://host.docker.internal:11434` | Ollama on the host |
 | `OLLAMA_MODEL` | agent | `qwen3:8b` | Model used by the agent |
+| `CORS_ORIGINS` | api, agent | – (off) | Comma-separated origins allowed to call the service from a browser |
 
 The agent's other settings (step and time limits, tool limits, cooldown, token cap) are defined in [`agent/config.py`](agent/config.py). Each can be overridden with an environment variable of the same name.
 
@@ -408,6 +409,20 @@ make test      # pytest with coverage of api, agent and eval
 
 Other targets: `make up`, `make down`, `make logs`, `make smoke`, `make clean`.
 
+### Web frontend
+
+A React + TypeScript single-page app in `web/` (Vite, TanStack Query, React Router, Recharts) with the Fleet, vehicle detail, Alerts and Incidents views. With the stack running:
+
+```bash
+cd web
+npm ci
+npm run dev                                   # http://localhost:5173
+npm run lint && npm run typecheck && npm test -- --run
+npm run gen:types                             # after `make openapi`: regenerate API types
+```
+
+The browser only talks to its own origin: Vite (and nginx in production) forwards `/api` to the API and `/agent` to the agent, so no CORS is needed and the services stay unchanged. For setups without a proxy, `CORS_ORIGINS` can allow specific origins on both services; it is off by default.
+
 ### UI tests
 
 Browser tests for the Streamlit dashboard, written with [Playwright](https://playwright.dev/python/). They run against the running stack, so start it first:
@@ -425,6 +440,7 @@ With `LLM_PROVIDER=fake` in `.env` the report is ready in seconds. Add `--headed
 
 ```
 api/              FastAPI service (main.py, database.py, models.py, metrics.py, logging_config.py) + Dockerfile
+web/              React + TypeScript frontend (Vite); API types generated from web/openapi/fleet-api.json
 dashboard/        Streamlit dashboard: app.py (navigation), fleet.py, incidents.py + Dockerfile
 simulator/        Sensor data simulator + Dockerfile
 agent/            AI incident agent: config, LLM providers, tools, loop, report, queue, storage, MCP server + Dockerfile
@@ -432,7 +448,7 @@ eval/             Fault-injection evaluation of the agent: scenarios, harness, r
 tests/            pytest suite (isolated SQLite DB per test, mocked HTTP, scripted LLM)
 ui_tests/         Playwright UI tests for the dashboard (run against the running stack)
 monitoring/       Prometheus rules, Alertmanager, Loki and Alloy config, Grafana provisioning and dashboard
-scripts/          smoke_test.sh
+scripts/          smoke_test.sh, export_openapi.py
 deploy/ansible/   Ansible playbook and smart_fleet role
 infra/terraform/  Terraform AWS module (tested against Moto)
 docs/             Operational runbook, screenshots

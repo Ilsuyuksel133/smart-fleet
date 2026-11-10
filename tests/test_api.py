@@ -199,3 +199,39 @@ def test_openapi_documents_the_response_schemas(client):
     ]
     alert_params = {p["name"] for p in spec["paths"]["/alerts"]["get"]["parameters"]}
     assert alert_params == {"limit", "vehicle_id", "type"}
+
+
+# --- CORS ---
+
+
+def preflight(client, origin):
+    return client.options(
+        "/vehicles",
+        headers={"Origin": origin, "Access-Control-Request-Method": "GET"},
+    )
+
+
+def test_cors_is_off_by_default(client):
+    response = client.get("/vehicles", headers={"Origin": "http://evil.example"})
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_cors_allows_only_configured_origins():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from main import add_cors, parse_origins
+
+    assert parse_origins(" http://a.example , ,http://b.example") == [
+        "http://a.example",
+        "http://b.example",
+    ]
+    app = FastAPI()
+    app.get("/vehicles")(lambda: [])
+    add_cors(app, ["http://localhost:5173"])
+    test_client = TestClient(app)
+
+    allowed = preflight(test_client, "http://localhost:5173")
+    assert allowed.headers["access-control-allow-origin"] == "http://localhost:5173"
+    blocked = preflight(test_client, "http://evil.example")
+    assert "access-control-allow-origin" not in blocked.headers

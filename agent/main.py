@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
@@ -100,6 +101,15 @@ def create_app(
         yield
 
     app = FastAPI(title="smart-fleet incident agent", lifespan=lifespan)
+    origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+    if origins:
+        # Off by default: the web frontend calls the agent through its own proxy
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type"],
+        )
     app.state.service = service
 
     @app.get("/health")

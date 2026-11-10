@@ -4,6 +4,7 @@ import time
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from schemas import (
@@ -33,6 +34,29 @@ log = logging.getLogger("fleet-api")
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Smart Fleet API", version="1.0.0")
+
+
+def parse_origins(value: str) -> list[str]:
+    """CORS_ORIGINS="http://a.example,http://b.example" -> ["http://a.example", "http://b.example"]"""
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
+def add_cors(application: FastAPI, origins: list[str]) -> None:
+    """Allow browsers on these origins to call the API directly.
+
+    Off by default: the web frontend calls the API through its own origin
+    (Vite or nginx proxy), so CORS is not needed. Only GET and POST are used.
+    """
+    if origins:
+        application.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type"],
+        )
+
+
+add_cors(app, parse_origins(os.getenv("CORS_ORIGINS", "")))
 
 
 # --- Middleware for HTTP metrics and request logs ---

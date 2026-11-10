@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # Skip an alert from Alertmanager if it was investigated less than this ago
     investigation_cooldown_seconds: float = 900.0
 
+    # Comma-separated origins allowed to call the agent from a browser (CORS).
+    # Empty by default: the web frontend reaches the agent through its proxy.
+    cors_origins: str = ""
+
     log_level: str = "INFO"
 
 
