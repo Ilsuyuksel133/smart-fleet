@@ -28,19 +28,36 @@ See [results.md](results.md) (generated) and [results.json](results.json) (raw) 
 
 All runs: `qwen3:8b`, think off, Apple M2 / 16 GB, 3 runs per scenario.
 
-| Scenario | Run A | Run B | Run C (latest) |
-|---|---|---|---|
-| api_down | 2/3 | 2/3 | 3/3 |
-| overheating | 3/3 | 2/3 | 0/3 |
-| alert_storm | 3/3 | 3/3 | 3/3 |
-| control | 3/3 | 2/3 | 3/3 |
-| **Total** | **11/12 (92%)** | **9/12 (75%)** | **9/12 (75%)** |
+| Scenario | Run A | Run B | Run C | Run D (latest) |
+|---|---|---|---|---|
+| api_down | 2/3 | 2/3 | 3/3 | 3/3 |
+| overheating | 3/3 | 2/3 | 0/3 | 3/3 |
+| alert_storm | 3/3 | 3/3 | 3/3 | 3/3 |
+| control | 3/3 | 2/3 | 3/3 | 3/3 |
+| **Total** | **11/12 (92%)** | **9/12 (75%)** | **9/12 (75%)** | **12/12 (100%)** |
 
 Code changes between the runs:
 - **Run B:** the generated tokens are capped and a timed-out LLM call is retried once.
 - **Run C:** the report retry uses structured output, rejected reports are logged, and the tool description lists the `job` values.
+- **Run D:** a fifth tool, `search_runbook` (semantic search over the runbook), and a sentence in the `get_runbook` description pointing to it. The system prompt and the loop are unchanged. `qwen3:8b` was downloaded again before this run.
 
-Differences of two or three answers between runs of 12 are within what small samples of a non-deterministic model show, so no single run should be read as a regression or an improvement. **Over all runs: 29/36 (81%).**
+Differences of two or three answers between runs of 12 are within what small samples of a non-deterministic model show, so no single run should be read as a regression or an improvement. **Over all runs: 41/48 (85%).**
+
+### Run D and the runbook search
+
+Run D is the first run without a single failure, but the tool log shows that `search_runbook` is not the reason:
+
+| Tool | Calls in Run D (12 investigations) |
+|---|---|
+| `query_prometheus` | 13 |
+| `get_service_health` | 12 |
+| `query_loki` | 8 |
+| `get_runbook` | 6 |
+| `search_runbook` | 1 |
+
+The one call came from a `HighAlertRate` investigation and searched for the alert name itself, which `get_runbook` answers exactly. None of the overheating investigations used the search. In Run C all three overheating runs failed because the model queried `fleet_alerts_total` with a `vehicle_id` label it does not have; in Run D the first run made a similar observation ("no corresponding alerts were detected") but still chose `sensor_anomaly`. So the 0/3 → 3/3 change is best explained by the variation between runs (Run A already had 3/3) and possibly by the newly downloaded model, not by retrieval.
+
+That is expected for this evaluation: each scenario is one of the four alerts, for which the prompt recommends `get_runbook` first. The search is meant for questions without an alert name. Its quality is measured separately in [`retrieval/results.md`](retrieval/results.md) (hit@3 95% with embeddings, 90% with the keyword fallback). An agent evaluation with free-text incidents (e.g. "the database is unreachable") would show whether the agent uses it.
 
 ### Failures and what they show
 

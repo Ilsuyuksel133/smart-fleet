@@ -57,6 +57,7 @@ The incident agent uses a local model through [Ollama](https://ollama.com) runni
 ```bash
 brew install ollama && brew services start ollama
 ollama pull qwen3:8b
+ollama pull nomic-embed-text   # embeddings for the runbook search
 ```
 
 Without Ollama, set `LLM_PROVIDER=fake` in `.env`: the agent then writes scripted demo reports. With `ollama` but no Ollama running, the agent stays up and its reports end with `stop_reason: llm_error`.
@@ -156,14 +157,35 @@ The fixed category list makes the evaluation deterministic.
 
 ### Tools
 
-All tools in [`agent/tools.py`](agent/tools.py) are **read-only** (HTTP GET or reading the runbook). Each has a timeout and short, summarized output, so the small local model's context window is not flooded.
+All tools in [`agent/tools.py`](agent/tools.py) are **read-only** (HTTP GET, reading the runbook, or embedding a question). Each has a timeout and short, summarized output, so the small local model's context window is not flooded.
 
 | Tool | What it returns | Limits |
 |---|---|---|
 | `query_prometheus(promql, minutes)` | min / max / last value per series | 1–60 min, max 10 series |
 | `query_loki(logql, minutes, limit)` | newest matching log lines (metric queries are summarized) | 1–60 min, max 50 lines |
 | `get_runbook(alert_name)` | the matching `## <Alert>` section of [`docs/RUNBOOK.md`](docs/RUNBOOK.md) | runbook only |
+| `search_runbook(query, top_k)` | the runbook passages closest in meaning to a free-text question, with section and score | 1–5 passages, similarity ≥ 0.55 |
 | `get_service_health()` | API `/health` and Prometheus `up` per target | — |
+
+### Runbook search (RAG)
+
+`get_runbook` needs the alert name; `search_runbook` ([`agent/rag.py`](agent/rag.py)) answers free-text questions such as "the API cannot talk to MySQL" or "no logs in Grafana". Both stay: the exact lookup is deterministic and fast for known alerts, the search covers everything else.
+
+1. **Chunking:** the runbook is split at its `## ` sections; sections over 800 characters are split between paragraphs, never inside a code block. Each chunk keeps its heading path (e.g. `Database unreachable > Checks`). The runbook gives 23 chunks.
+2. **Embedding:** `nomic-embed-text` through Ollama, with its `search_document:` / `search_query:` prefixes. The vectors are cached in the agent's volume and recomputed when the runbook or the model changes; the agent builds them in the background at startup.
+3. **Search:** cosine similarity with numpy, top 3, results below 0.55 dropped. For 23 vectors a vector database would add a service and nothing else; with many thousands of documents, sqlite-vec or pgvector would be the next step.
+4. **Fallback:** if Ollama is unreachable, the tool ranks the chunks with BM25 keyword scoring and says so in its first line (`NOTE: keyword fallback`), in line with the other tools: no exception, readable text.
+
+With `LLM_PROVIDER=fake` a deterministic word-hash embedder replaces the model, so CI tests the same code path.
+
+**Retrieval evaluation** ([`eval/retrieval/`](eval/retrieval/results.md)): 20 questions written in different words than the runbook, each with the section that answers it. `python -m eval.run_retrieval_eval`:
+
+| Method | hit@1 | hit@3 | MRR |
+|---|---|---|---|
+| Embedding (`nomic-embed-text`) | 95% | 95% | 0.96 |
+| Keyword (BM25 fallback) | 75% | 90% | 0.85 |
+
+The embedding search fails on one question ("Metrics stopped arriving even though the containers run", ranked 4th). The questions were written by the same person as the runbook, so these numbers are an upper bound, not a benchmark.
 
 ### Safety decisions
 
@@ -190,7 +212,7 @@ All tools in [`agent/tools.py`](agent/tools.py) are **read-only** (HTTP GET or r
 
 ### MCP server
 
-The same four read-only tools are also available as an [MCP](https://modelcontextprotocol.io) server ([`agent/mcp_server.py`](agent/mcp_server.py), official MCP Python SDK). Any MCP client, e.g. Claude Desktop, can then query smart-fleet's metrics, logs, runbook and health directly.
+The same five read-only tools are also available as an [MCP](https://modelcontextprotocol.io) server ([`agent/mcp_server.py`](agent/mcp_server.py), official MCP Python SDK). Any MCP client, e.g. Claude Desktop, can then query smart-fleet's metrics, logs, runbook and health directly.
 
 The MCP tools call the agent's own tool functions, so the limits, truncation and error handling are identical, and every tool is marked `read_only_hint`. The server speaks stdio and runs inside the agent container, so it reaches Prometheus, Loki and the API on the Compose network:
 
@@ -228,15 +250,17 @@ The agent reaches it at `http://host.docker.internal:11434`. Model and URL are e
 - make every vehicle report errors
 - a false alarm on a healthy system
 
-| Scenario | Expected | Run A | Run B | Run C |
-|---|---|---|---|---|
-| API container stopped | service_down | 2/3 | 2/3 | 3/3 |
-| One vehicle at 95–100 °C | sensor_anomaly | 3/3 | 2/3 | 0/3 |
-| Every vehicle reports ERROR | alert_storm | 3/3 | 3/3 | 3/3 |
-| False alarm, healthy system | unknown / low confidence | 3/3 | 2/3 | 3/3 |
-| **Total** | | **11/12** | **9/12** | **9/12** |
+| Scenario | Expected | Run A | Run B | Run C | Run D |
+|---|---|---|---|---|---|
+| API container stopped | service_down | 2/3 | 2/3 | 3/3 | 3/3 |
+| One vehicle at 95–100 °C | sensor_anomaly | 3/3 | 2/3 | 0/3 | 3/3 |
+| Every vehicle reports ERROR | alert_storm | 3/3 | 3/3 | 3/3 | 3/3 |
+| False alarm, healthy system | unknown / low confidence | 3/3 | 2/3 | 3/3 | 3/3 |
+| **Total** | | **11/12** | **9/12** | **9/12** | **12/12** |
 
-**29 of 36 runs correct (81%)** with `qwen3:8b` on an Apple M2. The code changed slightly between the runs; the per-run results and an analysis of every failure are in [`eval/README.md`](eval/README.md).
+**41 of 48 runs correct (85%)** with `qwen3:8b` on an Apple M2. The code changed slightly between the runs; the per-run results and an analysis of every failure are in [`eval/README.md`](eval/README.md).
+
+Run D is the first run with `search_runbook`, but **the new tool does not explain its result**: the agent called it once in 12 investigations (with the alert name, where `get_runbook` fits better), and never in the overheating runs. The system prompt still recommends `get_runbook` first, and investigations of known alerts rarely need a free-text search. The jump in the overheating scenario (0/3 → 3/3) is within the run-to-run variation seen before; the model was also downloaded again between Run C and Run D. The search is meant for questions outside the four alerts, which this evaluation does not cover.
 
 ```bash
 python -m eval.run_eval --runs 3      # needs the stack running with LLM_PROVIDER=ollama
@@ -480,7 +504,8 @@ web/              React + TypeScript frontend (Vite) + Dockerfile and nginx.conf
 dashboard/        Streamlit dashboard: app.py (navigation), fleet.py, incidents.py + Dockerfile
 simulator/        Sensor data simulator + Dockerfile
 agent/            AI incident agent: config, LLM providers, tools, loop, report, queue, storage, MCP server + Dockerfile
-eval/             Fault-injection evaluation of the agent: scenarios, harness, results
+eval/             Fault-injection evaluation of the agent (scenarios, harness, results) and
+                  the runbook retrieval evaluation (retrieval/questions.yaml, run_retrieval_eval.py)
 tests/            pytest suite (fresh SQLite DB per test or TEST_DATABASE_URL, mocked HTTP, scripted LLM)
 ui_tests/         Playwright UI tests: web/ (React app) and streamlit/ (dashboard), run against the running stack
 monitoring/       Prometheus rules, Alertmanager, Loki and Alloy config, Grafana provisioning and dashboard
