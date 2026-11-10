@@ -10,8 +10,11 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { vi } from "vitest";
 
 export function renderPage(element: ReactElement, { route = "/", path = "/" } = {}) {
-  // No retries: a failing request must show the error state immediately
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // No retries: a failing request must show the error state immediately.
+  // Hooks with their own retry rule (useReport) retry without waiting.
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, retryDelay: 0 } },
+  });
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>

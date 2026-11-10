@@ -221,3 +221,17 @@ button:disabled {
   border-radius: 8px;
   padding: 1rem 0.5rem 0.5rem;
 }
+
+.prewrap {
+  white-space: pre-wrap;
+}
+
+.run-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+}
+
+.run-facts dd {
+  margin: 0;
+}
