@@ -13,7 +13,7 @@ flowchart LR
     web -- "/agent/*" --> agent
     sim[Simulator] -- "POST sensor data" --> api[FastAPI API]
     dash[Streamlit dashboard] -- "GET vehicles / alerts" --> api
-    api --> db[(SQLite<br/>volume)]
+    api --> db[(MySQL 8.4<br/>volume)]
     prom[Prometheus] -- "scrape /metrics" --> api
     alloy[Grafana Alloy] -- "read container logs<br/>(Docker socket)" --> api
     alloy -- "push logs" --> loki[Loki]
@@ -30,7 +30,8 @@ flowchart LR
 | Service | Description | URL |
 |---|---|---|
 | `web` | React + TypeScript UI (nginx, proxies `/api` and `/agent`) | http://localhost:8080 |
-| `api` | FastAPI REST API, `/health` and `/metrics`, JSON logs | http://localhost:8000/docs |
+| `api` | FastAPI REST API, `/health` and `/metrics`, JSON logs; runs the database migrations on start | http://localhost:8000/docs |
+| `mysql` | MySQL 8.4 LTS, the API's database (not published on the host) | – |
 | `dashboard` | Streamlit UI: vehicles and alerts, plus an **Incidents** page with the agent's reports | http://localhost:8501 |
 | `simulator` | Sends random sensor readings every few seconds | – |
 | `prometheus` | Scrapes metrics, evaluates alert rules | http://localhost:9090 |
@@ -74,7 +75,9 @@ All configuration comes from environment variables (see `.env.example`).
 
 | Variable | Service | Default | Description |
 |---|---|---|---|
-| `DATABASE_URL` | api | `sqlite:///./data/fleet.db` | SQLAlchemy database URL |
+| `DATABASE_URL` | api | `sqlite:///./data/fleet.db` | SQLAlchemy database URL; Compose sets it to the `mysql` service |
+| `MYSQL_PASSWORD` | mysql, api | – (required) | Password of the `fleet` user |
+| `MYSQL_ROOT_PASSWORD` | mysql | – (required) | MySQL root password |
 | `ALERT_TEMP_THRESHOLD` | api | `80` | Temperature (°C) above which an alert is created |
 | `LOG_LEVEL` | api, simulator | `INFO` | Python log level |
 | `API_URL` | dashboard, simulator | `http://localhost:8000` | API base URL |
@@ -257,6 +260,7 @@ The pipeline in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on p
 flowchart LR
     lt[lint-and-test] --> db[docker-build<br/>api · dashboard · simulator · agent · web]
     wt[web-lint-and-test] --> db
+    lt --> my[api-mysql] --> db
     db --> st[smoke-test]
     lt --> an[ansible-deploy-test]
     tf[terraform]
@@ -265,6 +269,7 @@ flowchart LR
 | Job | What it does |
 |---|---|
 | **lint-and-test** | `ruff check`, `ruff format --check`, `pytest` with coverage of `api`, `agent` and `eval` (report uploaded as an artifact) |
+| **api-mysql** | MySQL 8.4 service container: `alembic upgrade head` and `alembic check` on an empty database, then the API tests against MySQL |
 | **web-lint-and-test** | ESLint, `tsc`, Vitest and the production build of `web/`, then the API contract check (OpenAPI schema and generated types must match the API code) |
 | **docker-build** | Builds the five images in parallel (matrix) with GitHub Actions layer cache. On `main` pushes them to GHCR as `ghcr.io/ilsuyuksel133/smart-fleet-<service>` with `sha-<short-sha>` and `latest` tags; pull requests only build |
 | **smoke-test** | Starts the full stack with Docker Compose, runs [`scripts/smoke_test.sh`](scripts/smoke_test.sh) (health → alert → metrics → log in Loki → agent: webhook alert → stored RCA report → web UI and its proxy, with `LLM_PROVIDER=fake`), then runs the Playwright UI tests in [`ui_tests/`](ui_tests/) against the web app and the dashboard (screenshots uploaded as an artifact on failure), prints logs on failure, always tears down |
@@ -361,8 +366,12 @@ pip install -r requirements.txt
 cp inventory.example.ini inventory.ini   # add your host
 ansible-playbook -i inventory.ini site.yml \
   -e smart_fleet_image_tag=sha-1a2b3c4 \
-  -e smart_fleet_grafana_admin_password='<password>'
+  -e smart_fleet_grafana_admin_password='<password>' \
+  -e smart_fleet_mysql_password='<password>' \
+  -e smart_fleet_mysql_root_password='<password>'
 ```
+
+MySQL sets its passwords only when its volume is created; later runs must pass the same values (Ansible Vault is the place to keep them).
 
 **Idempotency:** running the playbook a second time changes nothing. CI verifies this on every run by executing the playbook twice against the GitHub Actions runner and requiring `changed=0` on the second run.
 
@@ -415,6 +424,19 @@ make test      # pytest with coverage of api, agent and eval
 
 Other targets: `make up`, `make down`, `make logs`, `make smoke`, `make clean`.
 
+### Database and migrations
+
+Compose runs the API on **MySQL 8.4**; without `DATABASE_URL` the API uses a local SQLite file, which keeps development and the test suite free of a database server. The schema is managed with **Alembic**: the container runs `alembic upgrade head` before it starts uvicorn, so a new image brings its schema changes with it.
+
+```bash
+cd api
+alembic upgrade head                              # create or update the schema (local SQLite)
+alembic revision --autogenerate -m "add column"   # after changing models.py; review the file
+alembic upgrade head --sql                        # print the SQL instead of running it
+```
+
+Tests use a fresh SQLite database per test. `TEST_DATABASE_URL` runs them against a real server instead; the CI job `api-mysql` does this with a MySQL service container and also runs `alembic upgrade head` and `alembic check`, which fails when the models have changes that no migration contains.
+
 ### Frontend development
 
 A React + TypeScript single-page app in `web/` (Vite, TanStack Query, React Router, Recharts) with the Fleet, vehicle detail, Alerts and Incidents views. In Docker it is served by nginx on port 8080. For development, run Vite against the running stack:
@@ -452,13 +474,14 @@ With `LLM_PROVIDER=fake` in `.env` the report is ready in seconds. Add `--headed
 ## Project structure
 
 ```
-api/              FastAPI service (main.py, database.py, models.py, metrics.py, logging_config.py) + Dockerfile
+api/              FastAPI service (main.py, database.py, models.py, metrics.py, logging_config.py),
+                  Alembic migrations (alembic.ini, migrations/), entrypoint.sh + Dockerfile
 web/              React + TypeScript frontend (Vite) + Dockerfile and nginx.conf; API types generated from web/openapi/fleet-api.json
 dashboard/        Streamlit dashboard: app.py (navigation), fleet.py, incidents.py + Dockerfile
 simulator/        Sensor data simulator + Dockerfile
 agent/            AI incident agent: config, LLM providers, tools, loop, report, queue, storage, MCP server + Dockerfile
 eval/             Fault-injection evaluation of the agent: scenarios, harness, results
-tests/            pytest suite (isolated SQLite DB per test, mocked HTTP, scripted LLM)
+tests/            pytest suite (fresh SQLite DB per test or TEST_DATABASE_URL, mocked HTTP, scripted LLM)
 ui_tests/         Playwright UI tests: web/ (React app) and streamlit/ (dashboard), run against the running stack
 monitoring/       Prometheus rules, Alertmanager, Loki and Alloy config, Grafana provisioning and dashboard
 scripts/          smoke_test.sh, export_openapi.py
@@ -472,6 +495,5 @@ docs/             Operational runbook, screenshots
 - Agent: a "no data" hint in the Prometheus tool (the most frequent reasoning error) and an evaluation of other models
 - Agent: authentication for its HTTP endpoints
 - Alertmanager notifications (Slack / e-mail) in addition to the agent webhook
-- Move from SQLite to PostgreSQL (`postgres` service in Compose)
 - Apply the Terraform module to a real AWS account with a remote state backend
 - Helm chart and a Kubernetes (kind) deployment test in CI
