@@ -1,7 +1,7 @@
 """Read-only tools the agent can use to investigate an alert.
 
 Design rules for every tool:
-- It only reads data (HTTP GET or reading the runbook file). Nothing here can
+- It only reads data (HTTP GET, reading the runbook file, or embedding a question). Nothing here can
   change the system; acting on the findings is left to a human.
 - Its output is plain text, kept short (summaries, line limits, truncation),
   because everything a tool returns is sent back to the LLM and a small local
@@ -21,6 +21,7 @@ from typing import Any
 import httpx
 
 from agent.config import Settings
+from agent.rag import RunbookSearch, format_results, get_embedder
 
 
 @dataclass
@@ -192,6 +193,21 @@ def get_runbook(settings: Settings, alert_name: str) -> str:
     return f"No runbook section for '{alert_name}'. Available sections: " + ", ".join(titles)
 
 
+def search_runbook(
+    settings: Settings, searcher: RunbookSearch, query: str, top_k: Any = None
+) -> str:
+    """The runbook passages closest in meaning to a free-text question."""
+    if not str(query).strip():
+        return "ERROR: query is empty"
+    top_k = clamp(top_k, 1, 5, default=settings.rag_top_k)
+    try:
+        result = searcher.search(str(query), top_k, settings.rag_min_score)
+    except OSError as error:
+        return f"ERROR: runbook not readable ({type(error).__name__})"
+    text = format_results(str(query), result, searcher.section_titles())
+    return truncate(text, settings.max_tool_output_chars)
+
+
 def get_service_health(settings: Settings) -> str:
     """Check the API health endpoint and Prometheus' view of its scrape targets."""
     report = []
@@ -221,8 +237,9 @@ def get_service_health(settings: Settings) -> str:
 # --- Registry ---
 
 
-def build_tools(settings: Settings) -> dict[str, Tool]:
+def build_tools(settings: Settings, searcher: RunbookSearch | None = None) -> dict[str, Tool]:
     """All tools, bound to the given settings, keyed by name."""
+    searcher = searcher or RunbookSearch(settings, get_embedder(settings))
     tools = [
         Tool(
             name="query_prometheus",
@@ -280,7 +297,10 @@ def build_tools(settings: Settings) -> dict[str, Tool]:
         ),
         Tool(
             name="get_runbook",
-            description="Get the runbook section for an alert (symptoms, checks and fixes).",
+            description=(
+                "Get the runbook section for an alert (symptoms, checks and fixes). "
+                "Use this when you know the alert name; use search_runbook for anything else."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -292,6 +312,24 @@ def build_tools(settings: Settings) -> dict[str, Tool]:
                 "required": ["alert_name"],
             },
             run=lambda alert_name: get_runbook(settings, alert_name),
+        ),
+        Tool(
+            name="search_runbook",
+            description=(
+                "Search the whole runbook by meaning with a free-text question or symptom, "
+                "e.g. 'no logs in Loki', 'database unreachable', 'agent produces no reports'. "
+                "Returns the best matching passages with their section. Use get_runbook "
+                "instead when you know the alert name."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Question or symptom"},
+                    "top_k": {"type": "integer", "description": "Number of passages (1-5)"},
+                },
+                "required": ["query"],
+            },
+            run=lambda query, top_k=None: search_runbook(settings, searcher, query, top_k),
         ),
         Tool(
             name="get_service_health",

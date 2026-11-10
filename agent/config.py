@@ -35,6 +35,16 @@ class Settings(BaseSettings):
     # in the repository it is docs/RUNBOOK.md. Both resolve to the same relative path.
     runbook_path: Path = Path(__file__).resolve().parent.parent / "docs" / "RUNBOOK.md"
 
+    # Runbook search (agent/rag.py): embedding model in Ollama, results per search,
+    # minimum cosine similarity of a result, chunk size and the cached vectors
+    embedding_model: str = "nomic-embed-text"
+    rag_top_k: int = 3
+    # nomic-embed-text: relevant passages scored 0.65+, off-topic questions up to ~0.52
+    # (eval/retrieval); below the threshold the tool says that nothing matched
+    rag_min_score: float = 0.55
+    rag_chunk_chars: int = 800
+    runbook_index_path: Path = Path("./data/runbook_index.json")
+
     # Tool limits: keep the model's context small and every call bounded in time
     tool_timeout_seconds: float = 10.0
     max_query_minutes: int = 60

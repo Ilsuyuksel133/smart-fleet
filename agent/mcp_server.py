@@ -1,6 +1,6 @@
 """The agent's read-only tools, also offered as an MCP server.
 
-The same four tools the agent loop uses (agent/tools.py) are exposed over the
+The same five tools the agent loop uses (agent/tools.py) are exposed over the
 Model Context Protocol, so any MCP client (e.g. Claude Desktop) can query
 smart-fleet's metrics, logs, runbook and health with them.
 
@@ -47,11 +47,14 @@ def create_server(settings: Settings | None = None) -> MCPServer:
     def get_runbook(alert_name: str) -> str:
         return run_tool(tools, "get_runbook", {"alert_name": alert_name})
 
+    def search_runbook(query: str, top_k: int = 3) -> str:
+        return run_tool(tools, "search_runbook", {"query": query, "top_k": top_k})
+
     def get_service_health() -> str:
         return run_tool(tools, "get_service_health", {})
 
     server = MCPServer("smart-fleet", instructions=INSTRUCTIONS)
-    for function in [query_prometheus, query_loki, get_runbook, get_service_health]:
+    for function in [query_prometheus, query_loki, get_runbook, search_runbook, get_service_health]:
         server.add_tool(
             function,
             name=function.__name__,

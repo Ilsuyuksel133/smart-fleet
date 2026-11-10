@@ -23,12 +23,18 @@ def server(tmp_path):
 
 
 @pytest.mark.anyio
-async def test_lists_the_four_read_only_tools(server):
+async def test_lists_the_five_read_only_tools(server):
     async with Client(server, raise_exceptions=True) as client:
         result = await client.list_tools()
 
     tools = {tool.name: tool for tool in result.tools}
-    assert set(tools) == {"query_prometheus", "query_loki", "get_runbook", "get_service_health"}
+    assert set(tools) == {
+        "query_prometheus",
+        "query_loki",
+        "get_runbook",
+        "search_runbook",
+        "get_service_health",
+    }
     for tool in tools.values():
         assert tool.annotations.read_only_hint is True
         assert tool.annotations.destructive_hint is False
@@ -112,3 +118,17 @@ async def test_query_loki_through_mcp(tmp_path):
     async with Client(server, raise_exceptions=True) as client:
         result = await client.call_tool("query_loki", {"logql": '{service="api"}', "limit": 5})
     assert "[api] a log line" in result.content[0].text
+
+
+@pytest.mark.anyio
+@respx.mock
+async def test_search_runbook_through_mcp(server):
+    # No Ollama in the tests: the tool falls back to keyword search
+    respx.post("http://host.docker.internal:11434/api/embed").mock(
+        side_effect=httpx.ConnectError("refused")
+    )
+    async with Client(server, raise_exceptions=True) as client:
+        result = await client.call_tool("search_runbook", {"query": "api down", "top_k": 1})
+    text = result.content[0].text
+    assert text.startswith("NOTE: keyword fallback")
+    assert "[FleetApiDown (critical)]" in text

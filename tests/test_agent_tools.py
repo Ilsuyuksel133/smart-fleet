@@ -64,7 +64,13 @@ def test_clamp_limits_and_defaults():
 
 
 def test_tool_definitions_use_function_calling_format(tools):
-    assert set(tools) == {"query_prometheus", "query_loki", "get_runbook", "get_service_health"}
+    assert set(tools) == {
+        "query_prometheus",
+        "query_loki",
+        "get_runbook",
+        "search_runbook",
+        "get_service_health",
+    }
     definition = tools["query_loki"].definition()
     assert definition["type"] == "function"
     assert definition["function"]["name"] == "query_loki"
