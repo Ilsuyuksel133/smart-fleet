@@ -12,3 +12,5 @@ docs/*
 !docs/RUNBOOK.md
 .pytest_cache
 .ruff_cache
+web/node_modules
+web/dist
