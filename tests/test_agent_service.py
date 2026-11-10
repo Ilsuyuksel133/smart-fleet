@@ -263,3 +263,20 @@ def test_skipped_investigation_is_logged(store, caplog):
     skipped = [r for r in caplog.records if r.getMessage() == "investigation skipped"]
     assert len(skipped) == 1
     assert skipped[0].reason == "already queued or running"
+
+
+def test_agent_cors_is_configurable(tmp_path):
+    settings = Settings(
+        agent_database_url=f"sqlite:///{tmp_path}/agent.db", cors_origins="http://localhost:5173"
+    )
+    app = create_app(settings, provider=FakeProvider([]), start_worker=False)
+    with TestClient(app) as test_client:
+        allowed = test_client.get("/health", headers={"Origin": "http://localhost:5173"})
+        blocked = test_client.get("/health", headers={"Origin": "http://evil.example"})
+    assert allowed.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "access-control-allow-origin" not in blocked.headers
+
+
+def test_agent_cors_is_off_by_default(client):
+    response = client.get("/health", headers={"Origin": "http://localhost:5173"})
+    assert "access-control-allow-origin" not in response.headers
