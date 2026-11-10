@@ -11,7 +11,7 @@ variable "instance_type" {
 }
 
 variable "allowed_cidrs" {
-  description = "CIDR ranges allowed to reach SSH (22), the API (8000) and Grafana (3000). No default on purpose."
+  description = "CIDR ranges allowed to reach SSH (22), the API (8000), the web UI (8080) and Grafana (3000). No default on purpose."
   type        = list(string)
 
   validation {

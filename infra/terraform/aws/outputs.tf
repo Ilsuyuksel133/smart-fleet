@@ -13,6 +13,11 @@ output "api_url" {
   value       = "http://${aws_instance.app.public_ip}:8000/docs"
 }
 
+output "web_url" {
+  description = "React web UI (also proxies /api and /agent)."
+  value       = "http://${aws_instance.app.public_ip}:8080"
+}
+
 output "grafana_url" {
   description = "Grafana dashboard."
   value       = "http://${aws_instance.app.public_ip}:3000"

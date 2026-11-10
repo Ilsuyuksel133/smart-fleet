@@ -17,3 +17,7 @@ services:
   agent:
     build: !reset null
     image: ghcr.io/ilsuyuksel133/smart-fleet-agent:${IMAGE_TAG:?set IMAGE_TAG in .env}
+
+  web:
+    build: !reset null
+    image: ghcr.io/ilsuyuksel133/smart-fleet-web:${IMAGE_TAG:?set IMAGE_TAG in .env}

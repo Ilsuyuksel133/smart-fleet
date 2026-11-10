@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # End-to-end test of the running stack: health -> vehicle -> data -> alert -> metrics -> log (Loki)
-# -> agent (webhook alert -> RCA report)
-# Usage: scripts/smoke_test.sh [API_URL] [LOKI_URL] [AGENT_URL]
-#   defaults: http://localhost:8000, http://localhost:3100, http://localhost:8100
+# -> agent (webhook alert -> RCA report) -> web UI and its proxy
+# Usage: scripts/smoke_test.sh [API_URL] [LOKI_URL] [AGENT_URL] [WEB_URL]
+#   defaults: http://localhost:8000, http://localhost:3100, http://localhost:8100,
+#             http://localhost:8080
 set -euo pipefail
 
 API_URL="${1:-${API_URL:-http://localhost:8000}}"
 LOKI_URL="${2:-${LOKI_URL:-http://localhost:3100}}"
 AGENT_URL="${3:-${AGENT_URL:-http://localhost:8100}}"
+WEB_URL="${4:-${WEB_URL:-http://localhost:8080}}"
 RETRIES="${RETRIES:-30}"
 LOKI_RETRIES="${LOKI_RETRIES:-45}"
 # With a real local model an investigation takes about a minute
@@ -109,5 +111,24 @@ for i in $(seq 1 "$REPORT_RETRIES"); do
   log "Waiting for the agent's report... ($i/$REPORT_RETRIES)"
   sleep 2
 done
+
+# 9) Does the web UI load, and does nginx forward /api and /agent?
+for i in $(seq 1 "$RETRIES"); do
+  if curl -fsS "$WEB_URL/" > /dev/null 2>&1; then
+    log "Web UI OK"
+    break
+  fi
+  [ "$i" -eq "$RETRIES" ] && fail "Web UI did not respond after $RETRIES attempts"
+  log "Waiting for the web UI... ($i/$RETRIES)"
+  sleep 2
+done
+# A client-side route must return the app too (SPA fallback)
+curl -fsS "$WEB_URL/incidents/$investigation_id" | grep -q '<div id="root">' \
+  || fail "SPA fallback: $WEB_URL/incidents/$investigation_id did not return index.html"
+web_health=$(curl -fsS "$WEB_URL/api/health")
+grep -q '"status":"ok"' <<< "$web_health" || fail "Proxy to the API failed: $web_health"
+web_report=$(curl -fsS "$WEB_URL/agent/reports/$investigation_id")
+grep -q '"status":"done"' <<< "$web_report" || fail "Proxy to the agent failed: $web_report"
+log "Web proxy to API and agent OK"
 
 log "All checks passed ✅"

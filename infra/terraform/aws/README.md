@@ -9,7 +9,7 @@ This module describes the AWS infrastructure needed to run the smart-fleet stack
 | `aws_vpc` | Isolated network `10.0.0.0/16` |
 | `aws_subnet` (public) | `10.0.1.0/24`, instances get a public IP |
 | `aws_internet_gateway` + `aws_route_table` | Outbound/inbound internet routing for the public subnet |
-| `aws_security_group` + rules | Ports **22, 8000, 3000 only**, and only from `allowed_cidrs` (`0.0.0.0/0` is rejected by validation) |
+| `aws_security_group` + rules | Ports **22, 8000, 8080, 3000 only**, and only from `allowed_cidrs` (`0.0.0.0/0` is rejected by validation) |
 | `aws_instance` (`t3.micro`) | Ubuntu 24.04, IMDSv2 required, encrypted root volume |
 | `user_data` (cloud-init) | On first boot clones this repo and runs the [Ansible playbook](../../../deploy/ansible) against `localhost` |
 
@@ -61,7 +61,7 @@ For a real setup the state should live in a remote backend (e.g. S3 with state l
 |---|---|---|
 | `aws_region` | `eu-central-1` | AWS region |
 | `instance_type` | `t3.micro` | EC2 instance type |
-| `allowed_cidrs` | – (required) | CIDRs allowed to reach 22/8000/3000; `0.0.0.0/0` rejected |
+| `allowed_cidrs` | – (required) | CIDRs allowed to reach 22/8000/8080/3000; `0.0.0.0/0` rejected |
 | `image_tag` | – (required) | Immutable GHCR image tag; `latest` rejected |
 | `ami_id` | `null` | AMI override; when null, latest Canonical Ubuntu 24.04 |
 | `key_name` | `null` | Existing EC2 key pair for SSH |
@@ -71,4 +71,4 @@ For a real setup the state should live in a remote backend (e.g. S3 with state l
 
 ## Outputs
 
-`instance_id`, `public_ip`, `api_url`, `grafana_url`, `security_group_id`
+`instance_id`, `public_ip`, `api_url`, `web_url`, `grafana_url`, `security_group_id`

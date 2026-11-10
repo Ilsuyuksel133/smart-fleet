@@ -43,12 +43,13 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# --- Security: 22 / 8000 / 3000 from the allowed CIDR ranges only ---
+# --- Security: 22 / 8000 / 8080 / 3000 from the allowed CIDR ranges only ---
 
 locals {
   ingress_ports = {
     ssh     = 22
     api     = 8000
+    web     = 8080
     grafana = 3000
   }
 
