@@ -17,5 +17,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 8080
 
+# 127.0.0.1, not localhost: in Alpine localhost resolves to ::1 first, and nginx
+# listens on IPv4 only
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget -q --spider http://localhost:8080/ || exit 1
+    CMD wget -q --spider http://127.0.0.1:8080/ || exit 1
