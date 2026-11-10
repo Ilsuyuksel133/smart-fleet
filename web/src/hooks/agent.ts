@@ -20,10 +20,11 @@ export function useReports() {
   });
 }
 
-export function useReport(id: number) {
+export function useReport(id: number, enabled = true) {
   return useQuery({
     queryKey: ["report", id],
     queryFn: () => getReport(id),
+    enabled,
     // A report that does not exist will not appear by retrying
     retry: (failureCount, error) =>
       !(error instanceof ApiError && error.status === 404) && failureCount < 3,
