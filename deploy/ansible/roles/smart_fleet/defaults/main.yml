@@ -11,6 +11,10 @@ smart_fleet_repo_root: "{{ playbook_dir }}/../.."
 # Grafana admin password — required, pass it on the command line or via Ansible Vault
 # smart_fleet_grafana_admin_password:
 
+# MySQL passwords of the "fleet" user and of root — required, same as above
+# smart_fleet_mysql_password:
+# smart_fleet_mysql_root_password:
+
 smart_fleet_alert_temp_threshold: 80
 smart_fleet_log_level: INFO
 

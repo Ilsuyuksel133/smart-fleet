@@ -1,6 +1,7 @@
 #cloud-config
 # Runs on first boot: clones the repository and applies the deploy/ansible playbook to localhost.
-# The Grafana password is generated on the machine; it never appears in user_data or the Terraform state.
+# The Grafana and MySQL passwords are generated on the machine; they never appear in user_data or
+# the Terraform state. This runs only once, so the MySQL volume keeps the passwords it was created with.
 package_update: true
 packages:
   - git
@@ -16,3 +17,5 @@ runcmd:
     /opt/ansible-venv/bin/ansible-playbook -i inventory.localhost.ini site.yml
     -e smart_fleet_image_tag=${image_tag}
     -e smart_fleet_grafana_admin_password="$(openssl rand -hex 16)"
+    -e smart_fleet_mysql_password="$(openssl rand -hex 16)"
+    -e smart_fleet_mysql_root_password="$(openssl rand -hex 16)"
