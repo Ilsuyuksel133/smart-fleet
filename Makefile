@@ -1,4 +1,4 @@
-.PHONY: install lint format test up down logs smoke clean
+.PHONY: install lint format test openapi up down logs smoke clean
 
 install:  ## Install development dependencies
 	pip install -r requirements-dev.txt
@@ -11,6 +11,9 @@ format:   ## Auto-fix and format the code
 
 test:     ## Run tests with coverage
 	pytest --cov=api --cov=agent --cov=eval
+
+openapi:  ## Export the API's OpenAPI schema for the web frontend
+	python scripts/export_openapi.py
 
 up:       ## Build and start the whole stack
 	docker compose up -d --build

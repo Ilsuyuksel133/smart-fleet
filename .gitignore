@@ -28,3 +28,6 @@ deploy/ansible/inventory.ini
 tfplan
 crash.log
 AGENT_PLAN.md
+
+# macOS
+.DS_Store

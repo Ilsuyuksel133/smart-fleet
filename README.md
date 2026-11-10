@@ -374,12 +374,15 @@ ansible-playbook -i inventory.ini site.yml \
 | POST | `/vehicles` | Add a new vehicle |
 | POST | `/vehicles/{id}/data` | Send sensor data (404 if the vehicle does not exist) |
 | GET | `/vehicles` | List all vehicles with their latest status |
-| GET | `/vehicles/{id}/status` | Get sensor logs of a vehicle |
-| GET | `/alerts` | List all alerts |
+| GET | `/vehicles/{id}/status?limit=200` | Latest sensor readings of a vehicle, oldest first (404 if the vehicle does not exist) |
+| GET | `/alerts?limit=100&vehicle_id=3&type=high_temperature` | Alerts, newest first; optional filters by vehicle and type (`high_temperature`, `abnormal_status`) |
+| GET | `/stats?minutes=15` | Aggregates for the last N minutes: vehicles in total and not OK, alerts by type, readings and average/maximum temperature per vehicle |
 | GET | `/health` | Health check including a database query (503 if the DB is unreachable) |
 | GET | `/metrics` | Prometheus metrics |
 
 Alert logic: temperature above `ALERT_TEMP_THRESHOLD` creates a high-temperature alert; a status other than `OK` creates an abnormal-status alert.
+
+Every response has a declared schema (`api/schemas.py`), so the interactive docs at `/docs` show the exact JSON shapes. `make openapi` writes the schema to `web/openapi/fleet-api.json` for the web frontend. `/stats` is written with SQLAlchemy's `select()`, `GROUP BY` and `JOIN`; the equivalent SQL is next to each query in `api/main.py`.
 
 Incident agent (port 8100):
 
