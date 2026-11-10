@@ -22,16 +22,14 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 import metrics
-from database import engine, get_db
+from database import get_db
 from logging_config import setup_logging
-from models import Alert, Base, SensorLog, Vehicle
+from models import Alert, SensorLog, Vehicle
 
 ALERT_TEMP_THRESHOLD = float(os.getenv("ALERT_TEMP_THRESHOLD", "80"))
 
 setup_logging()
 log = logging.getLogger("fleet-api")
-
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Smart Fleet API", version="1.0.0")
 

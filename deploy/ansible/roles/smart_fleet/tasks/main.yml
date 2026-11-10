@@ -7,9 +7,13 @@
       - smart_fleet_image_tag != "latest"
       - smart_fleet_grafana_admin_password is defined
       - smart_fleet_grafana_admin_password | length > 0
+      - smart_fleet_mysql_password is defined
+      - smart_fleet_mysql_password | length > 0
+      - smart_fleet_mysql_root_password is defined
+      - smart_fleet_mysql_root_password | length > 0
     fail_msg: >-
-      smart_fleet_image_tag (immutable tag, not "latest") and
-      smart_fleet_grafana_admin_password must be set.
+      smart_fleet_image_tag (immutable tag, not "latest"), smart_fleet_grafana_admin_password,
+      smart_fleet_mysql_password and smart_fleet_mysql_root_password must be set.
     quiet: true
 
 # 1) Docker Engine + Compose plugin: leave them alone if already installed

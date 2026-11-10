@@ -15,7 +15,8 @@ Useful links: API docs http://localhost:8000/docs · Prometheus alerts http://lo
 
 **Possible causes**
 - The `api` container stopped or crashed (bad deploy, Python exception at startup).
-- The container is running but unhealthy (database not reachable → `/health` returns 503).
+- The container is running but unhealthy (MySQL not reachable → `/health` returns 503, see *Database unreachable*).
+- The container keeps restarting because `alembic upgrade head` fails at startup (MySQL not ready, wrong password, broken migration).
 - Prometheus cannot reach `api:8000` (network or scrape config problem).
 
 **Checks**
@@ -39,7 +40,7 @@ If Loki itself shows nothing for the API, fall back to `docker compose logs api`
 **Fix**
 - Container stopped: `docker compose up -d api`
 - Crashing on startup: fix the error from the logs, then `docker compose up -d --build api`
-- `/health` returns 503: check the database volume (`docker compose exec api ls -la /app/data`); as a last resort see *Resetting the database* below.
+- `/health` returns 503: follow *Database unreachable* below.
 - Target down but API reachable from the host: check `monitoring/prometheus/prometheus.yml` and `docker compose restart prometheus`.
 
 The alert resolves automatically after the next successful scrape.
@@ -228,15 +229,50 @@ Agent logs in Grafana Explore → Loki: `{service="agent"} | json | message=~"in
 
 ---
 
+## Database unreachable
+
+**Symptom**
+- `curl -i http://localhost:8000/health` returns **503** `{"status":"error","db":"error"}`; the `api` container is up but unhealthy.
+- API logs contain `Health check: database unreachable` or `OperationalError ... Can't connect to MySQL server`.
+- Usually `FleetApiDown` fires as well, because Prometheus sees the unhealthy API.
+
+**Possible causes**
+- The `mysql` container is stopped, still starting (the first start takes about 30 s) or crashed (disk full, corrupted data).
+- Wrong password: `MYSQL_PASSWORD` in `.env` differs from the one the `mysql-data` volume was created with. MySQL reads its passwords only when the volume is empty.
+- Too many connections or a long-running query blocking the tables.
+
+**Checks**
+```bash
+docker compose ps mysql                                  # running? healthy?
+docker compose logs --tail 100 mysql                     # startup errors, "Access denied", disk
+docker compose exec mysql mysqladmin ping -h 127.0.0.1   # "mysqld is alive" expected
+docker compose exec mysql sh -c 'mysql -ufleet -p"$MYSQL_PASSWORD" fleet -e "SELECT 1; SHOW PROCESSLIST;"'
+docker compose logs --tail 50 api                        # connection errors, failed migration
+```
+
+**Logs to check (Grafana → Explore → Loki)**
+```logql
+{service="api"} |= "database unreachable"
+```
+MySQL's own logs are not shipped to Loki; use `docker compose logs mysql`.
+
+**Fix**
+- MySQL stopped: `docker compose up -d mysql`; the API reconnects by itself (`pool_pre_ping`), no restart needed.
+- Access denied after changing `.env`: put the old password back, or change it inside MySQL (`ALTER USER 'fleet'@'%' IDENTIFIED BY '...'`) and restart the API.
+- Migration failed at startup: read the Alembic error in `docker compose logs api`, fix it, then `docker compose up -d --build api`.
+- Data corrupted: last resort, see *Resetting the database*.
+
+---
+
 ## Resetting the database
 
-**When:** corrupted SQLite file, or you want a clean demo state.
+**When:** corrupted MySQL data, or you want a clean demo state.
 
 > ⚠️ This deletes all vehicles, sensor logs and alerts, the incident agent's reports, and the Prometheus/Grafana/Loki data volumes.
 
 ```bash
 docker compose down -v          # stop everything and remove named volumes
-docker compose up -d --build    # start with empty volumes
+docker compose up -d --build    # start with empty volumes; the API creates the schema (alembic upgrade head)
 make smoke                      # verify the stack
 ```
 The simulator recreates its demo vehicles automatically on start.

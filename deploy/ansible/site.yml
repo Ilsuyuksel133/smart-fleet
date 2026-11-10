@@ -1,6 +1,8 @@
 ---
 # Prepares a fresh Ubuntu server and runs smart-fleet with the GHCR images.
-#   ansible-playbook -i inventory.ini site.yml -e smart_fleet_grafana_admin_password=...
+#   ansible-playbook -i inventory.ini site.yml -e smart_fleet_image_tag=sha-... \
+#     -e smart_fleet_grafana_admin_password=... \
+#     -e smart_fleet_mysql_password=... -e smart_fleet_mysql_root_password=...
 - name: Deploy smart-fleet
   hosts: fleet
   become: true

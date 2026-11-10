@@ -16,16 +16,41 @@ services:
     ports:
       - "8000:8000"
     environment:
+      DATABASE_URL: mysql+pymysql://fleet:${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}@mysql:3306/fleet
       ALERT_TEMP_THRESHOLD: ${ALERT_TEMP_THRESHOLD:-80}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    volumes:
-      - fleet-data:/app/data
+    depends_on:
+      mysql:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
       interval: 10s
       timeout: 3s
       retries: 5
-      start_period: 5s
+      # The first start runs the migrations before uvicorn
+      start_period: 15s
+    restart: unless-stopped
+
+  mysql:
+    logging: *default-logging
+    image: mysql:8.4 # LTS release, also for arm64
+    environment:
+      MYSQL_DATABASE: fleet
+      MYSQL_USER: fleet
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+    # Not published on the host: only the API connects to it, inside the Compose network.
+    # For a shell: docker compose exec mysql mysql -ufleet -p fleet
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # Over TCP: during its first start MySQL runs a temporary server without
+      # networking to create the database, and a socket ping would succeed too early
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
     restart: unless-stopped
 
   dashboard:
@@ -56,7 +81,8 @@ services:
       agent:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
+      # 127.0.0.1: in Alpine "localhost" resolves to ::1 first, nginx listens on IPv4 only
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -160,7 +186,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       AGENT_DATABASE_URL: sqlite:////app/data/agent.db
     volumes:
-      # The agent's own database, separate from the API's fleet-data volume
+      # The agent's own database, separate from the API's MySQL
       - agent-data:/app/data
     extra_hosts:
       # Docker Desktop resolves host.docker.internal by itself; Linux needs this mapping
@@ -187,7 +213,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  fleet-data:
+  mysql-data:
   prometheus-data:
   grafana-data:
   loki-data:
