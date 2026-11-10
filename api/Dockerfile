@@ -12,12 +12,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api/ .
 
-# Non-root user; the SQLite file lives under /app/data
+# Non-root user. /app/data is only used when DATABASE_URL points to SQLite
+# (Compose uses MySQL).
 RUN useradd --create-home app \
     && mkdir -p /app/data \
     && chown -R app:app /app/data
 USER app
-VOLUME ["/app/data"]
 
 EXPOSE 8000
 
@@ -25,4 +25,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+# Runs the migrations (alembic upgrade head), then uvicorn
+CMD ["./entrypoint.sh"]

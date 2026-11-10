@@ -16,17 +16,26 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from database import Base, get_db  # noqa: E402
 from main import app  # noqa: E402
 
+# Set to run the API tests against a real server, e.g. MySQL in CI:
+# TEST_DATABASE_URL=mysql+pymysql://fleet:fleet@127.0.0.1:3306/fleet_test
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+
 
 @pytest.fixture
 def session_factory(tmp_path):
-    """A separate, temporary SQLite database for each test.
+    """A fresh database for each test: a temporary SQLite file, or the empty
+    tables of TEST_DATABASE_URL.
 
     Tests can also open sessions on it directly, e.g. to insert rows with
     timestamps in the past.
     """
-    engine = create_engine(
-        f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False}
-    )
+    if TEST_DATABASE_URL:
+        engine = create_engine(TEST_DATABASE_URL)
+        Base.metadata.drop_all(bind=engine)
+    else:
+        engine = create_engine(
+            f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False}
+        )
     Base.metadata.create_all(bind=engine)
     yield sessionmaker(bind=engine)
     engine.dispose()
