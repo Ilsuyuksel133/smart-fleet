@@ -1,0 +1,45 @@
+# Retrieval evaluation of search_runbook: each question and the runbook section
+# ("## " heading, prefix match) that should answer it.
+# The questions are written the way an operator would ask, avoiding the
+# runbook's own wording where possible, so keyword overlap alone is not enough.
+
+- question: The fleet service stopped answering HTTP requests, what do I look at first?
+  expected: FleetApiDown
+- question: Prometheus says the backend target is unreachable
+  expected: FleetApiDown
+- question: One truck keeps reporting engine heat well above normal
+  expected: VehicleOverheating
+- question: Could a broken thermometer on a vehicle cause false warnings?
+  expected: VehicleOverheating
+- question: We are flooded with warnings from the whole fleet at once
+  expected: HighAlertRate
+- question: How do I raise the temperature limit so fewer alarms are created?
+  expected: HighAlertRate
+- question: The dashboards are blank and show nothing at all
+  expected: No data in Grafana
+- question: Metrics stopped arriving even though the containers run
+  expected: No data in Grafana
+- question: Container output does not show up when I search it in Explore
+  expected: No logs in Loki
+- question: Is the log shipper allowed to read the docker socket?
+  expected: No logs in Loki
+- question: How should I interpret what the AI investigation wrote?
+  expected: Reading an incident agent report
+- question: What does it mean when the investigation ended because of a timeout?
+  expected: Reading an incident agent report
+- question: The assistant blamed the wrong thing, can I trust its conclusion?
+  expected: When the agent is wrong
+- question: The model said there was no data because it used a label that does not exist
+  expected: When the agent is wrong
+- question: An alarm fired but no investigation ever showed up
+  expected: The agent produces no reports
+- question: Every report ends with llm_error
+  expected: The agent produces no reports
+- question: The API health check returns 503 and says the db is down
+  expected: Database unreachable
+- question: Access denied for the fleet user after I edited the env file
+  expected: Database unreachable
+- question: How do I wipe everything and start over with an empty system?
+  expected: Resetting the database
+- question: The stored data looks corrupted and I want a clean demo
+  expected: Resetting the database

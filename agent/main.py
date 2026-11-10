@@ -8,6 +8,7 @@ Endpoints:
 """
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -21,6 +22,7 @@ from agent.config import Settings, get_settings
 from agent.llm import LLMProvider, get_provider
 from agent.logging_config import setup_logging
 from agent.loop import Investigator
+from agent.rag import RunbookSearch, get_embedder
 from agent.report import Alert
 from agent.service import InvestigationService
 from agent.storage import ReportStore
@@ -79,7 +81,8 @@ def create_app(
 ) -> FastAPI:
     """Build the app. Tests pass a FakeProvider and run the queue themselves."""
     provider = provider or get_provider(settings)
-    tools = build_tools(settings)
+    searcher = RunbookSearch(settings, get_embedder(settings))
+    tools = build_tools(settings, searcher)
     metrics.initialize(list(tools))
     investigator = Investigator(
         provider=provider,
@@ -97,6 +100,9 @@ def create_app(
     async def lifespan(app: FastAPI):
         if start_worker:
             service.start_worker()
+            # Embedding the runbook takes a few seconds and needs Ollama: do it in the
+            # background, so the agent starts even when Ollama is not running
+            threading.Thread(target=searcher.warm_up, name="runbook-index", daemon=True).start()
         log.info("agent started", extra={"llm_provider": provider.name})
         yield
 
